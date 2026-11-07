@@ -1,0 +1,158 @@
+use rust_embed::RustEmbed;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
+use sqlx::{Connection, SqliteConnection, SqlitePool};
+use sqlx_context::DbContext;
+use std::error::Error;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+use std::time::Duration;
+
+#[derive(RustEmbed)]
+#[folder = "../DairoMUSIC/assets/ddl/"]
+struct Assets;
+
+/// 数据库版本号
+const VERSION: i32 = 1;
+
+/// 数据库文件名
+pub const DB_FILE_NAME: &str = "dairo-music.sqlite";
+
+/// 建表顺序(init_data.sql是全新安装时的初始数据,放在最后)
+const SQL_FILES: [&str; 22] = [
+    "admin.sql",
+    "admin_token.sql",
+    "admin_role.sql",
+    "admin_permission.sql",
+    "admin_menu_bar.sql",
+    "app_version.sql",
+    "artist.sql",
+    "email.sql",
+    "feedback.sql",
+    "music.sql",
+    "music_collect.sql",
+    "music_complaint.sql",
+    "music_correct.sql",
+    "music_file.sql",
+    "music_lrc.sql",
+    "swiper.sql",
+    "system_config.sql",
+    "useful.sql",
+    "user.sql",
+    "user_favorite.sql",
+    "user_login.sql",
+    "user_music.sql",
+];
+
+/// 全新安装时的初始数据(菜单、超级管理员角色)
+const INIT_DATA_FILE: &str = "init_data.sql";
+
+/// 获取数据目录下的数据库文件路径
+pub fn db_path(data_dir: &str) -> PathBuf {
+    Path::new(data_dir).join(DB_FILE_NAME)
+}
+
+/// 全局数据库连接池
+static DB_CONN: OnceLock<SqlitePool> = OnceLock::new();
+
+/// 获取连接池
+pub fn get() -> SqlitePool {
+    DB_CONN.get().unwrap().clone()
+}
+
+/// 获取一个数据库操作上下文
+pub fn get_context() -> DbContext {
+    DbContext::new(DB_CONN.get().unwrap().clone())
+}
+
+/// 连接参数
+fn connect_options(db_path: &Path) -> SqliteConnectOptions {
+    //直接传文件路径,不拼接成URL,路径里有?、#等字符时也能正常打开
+    SqliteConnectOptions::new()
+        .filename(db_path)
+        .create_if_missing(true)
+        //WAL模式:多个读者,较少写者的场景(如Web服务器)
+        .journal_mode(SqliteJournalMode::Wal)
+        //数据库被锁时的等待时间
+        .busy_timeout(Duration::from_secs(10))
+}
+
+/// 初始化数据库连接和表结构
+/// - data_dir 数据目录,数据库文件保存在该目录下
+pub async fn init(data_dir: &str) {
+    //SQLite不会自动创建目录,先确保数据目录存在
+    std::fs::create_dir_all(data_dir).unwrap();
+    let db_path = db_path(data_dir);
+    eprintln!("-->数据库初始化中...");
+    init_pool(&db_path);
+    upgrade(true).await.unwrap_or_else(|it| {
+        eprintln!("-->数据库初始化失败: {}", it);
+        std::process::exit(1);
+    });
+    eprintln!("-->数据库初始化完成。");
+}
+
+/// 在指定文件建库(建表并写入初始数据),数据迁移工具使用
+pub async fn init_file(db_path: &Path) -> Result<(), Box<dyn Error>> {
+    init_pool(db_path);
+    upgrade(true).await
+}
+
+/// 编译期初始化数据库(仅建表),供build.rs生成DAO和sqlx宏检查sql语句使用
+pub async fn init_build(db_path: &Path) {
+    //每次都重新建库,保证表结构和ddl一致
+    let _ = std::fs::remove_file(db_path);
+    init_pool(db_path);
+    upgrade(false).await.unwrap();
+}
+
+/// 初始化全局连接池
+fn init_pool(db_path: &Path) {
+    DB_CONN
+        .set(
+            SqlitePoolOptions::new()
+                .max_connections(20)
+                .connect_lazy_with(connect_options(db_path)),
+        )
+        .unwrap();
+}
+
+/// 数据库升级
+/// - with_init_data 全新建库时是否写入初始数据(编译期的数据库不需要)
+async fn upgrade(with_init_data: bool) -> Result<(), Box<dyn Error>> {
+    let mut conn = get().acquire().await?;
+    let version: i64 = sqlx::query_scalar("PRAGMA USER_VERSION")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap_or(0);
+    if version == 0 {
+        //建表和初始数据在一个事务里完成,中途失败时下次启动重新建
+        let mut tx = (&mut *conn).begin().await?;
+        for sql_file in SQL_FILES {
+            execute_sql_file(&mut tx, sql_file).await?;
+        }
+        if with_init_data {
+            execute_sql_file(&mut tx, INIT_DATA_FILE).await?;
+        }
+        tx.commit().await?;
+    }
+
+    //以后的版本升级写在这里,每个版本一个事务
+
+    //设置数据库版本号(版本号没变时不写库)
+    if version != VERSION as i64 {
+        sqlx::query(&(format!("PRAGMA USER_VERSION = {}", VERSION)))
+            .execute(&mut *conn)
+            .await?;
+    }
+    Ok(())
+}
+
+/// 执行一个建表文件
+async fn execute_sql_file(conn: &mut SqliteConnection, sql_file: &str) -> Result<(), Box<dyn Error>> {
+    let Some(sql_mbed) = Assets::get(sql_file) else {
+        return Err(From::from(format!("{} not found", sql_file)));
+    };
+    let sql_str = std::str::from_utf8(sql_mbed.data.as_ref())?;
+    sqlx::raw_sql(sql_str).execute(&mut *conn).await?;
+    Ok(())
+}
