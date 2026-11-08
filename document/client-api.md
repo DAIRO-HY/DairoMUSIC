@@ -25,12 +25,16 @@
 ### GET /api/common/config
 服务器的公开配置,客户端选择服务器时调用,也可以用来判断地址是否是 DairoMUSIC 服务器。
 ```json
-{"version": "2.0.0", "allowRegister": true}
+{"serverId": "yxgqqjil9wcsyegvhrvetc1d7rehujy5", "version": "2.0.0", "allowRegister": true, "allowSaveAlbum": false, "allowDownloadMusic": true, "allowDownloadVideo": true}
 ```
-`allowRegister` 为 false 时隐藏注册和"免注册使用"。
+- `serverId`:服务器唯一标识,服务器第一次启动时生成,之后不会改变。服务器的域名、端口变了也不变,客户端可以用来区分不同服务器的缓存。
+- `allowRegister` 为 false 时隐藏注册和"免注册使用"。
+- `allowSaveAlbum`:是否允许把下载的视频保存到相册(后台"系统配置"里设置)。为 false 时下载视频不询问是否保存到相册。
+- `allowDownloadMusic`:是否允许下载歌曲(后台"系统配置"里设置,默认允许)。为 false 时隐藏歌曲的下载按钮(歌曲详情的下载、歌单的全部下载),已经下载的歌曲仍可以播放和删除。下载时选择音质使用 `/api/music/detail?id=&bitRate=`、`/api/favorite/musics?id=&bitRate=`。
+- `allowDownloadVideo`:是否允许下载视频(后台"系统配置"里设置,默认允许)。为 false 时隐藏视频的下载按钮,已经下载的视频仍可以播放和删除;`allowSaveAlbum` 只在允许下载视频时有意义。
 
 ### GET /api/app_version/check
-检查更新。参数:`client`(1:Windows 2:Mac 3:Linux 4:Android 5:Ios)、`versionCode`(当前版本号)。没有新版本时返回 `null`。
+检查更新。参数:`clientFlag`(客户端标识,和登录时的编号一致)、`versionCode`(当前版本号)。没有新版本时返回 `null`。
 ```json
 {"versionName": "1.3.2", "versionCode": 4, "installType": 2, "instruction": "更新说明", "url": "下载地址"}
 ```
@@ -79,17 +83,25 @@
   "logo": "封面地址",
   "duration": 269000,
   "maxBitRate": 320,
+  "videoState": 2,
   "favoriteId": 1,
   "file": {
+    "id": 203338, "md5": "文件的MD5,老数据可能为null",
     "bitRate": 320, "sampleRate": 44100, "dataStartPosition": null, "sampleCount": null, "frameLength": null,
     "size": 11401115, "format": "mp3", "url": "播放地址(支持断点续传)"
   },
-  "collect": {"platform": "YT", "extra": "采集参数", "url": "采集平台的播放地址"}
+  "collect": {
+    "platform": "YT", "extra": "采集参数", "url": "采集平台的播放地址",
+    "videoUrl": "采集平台的视频预览地址", "videoInfoUrl": "视频预览的采集进度地址"
+  }
 }
 ```
 - `artist`、`album` 可能为 null,由客户端决定显示什么。
 - `favoriteId` 只有歌单里的歌曲才有。
 - `file` 为 null 表示还没有采集完成,可以用 `collect.url` 播放。
+- `file.id` 是文件ID,不会改变,可以用来做缓存的key(DairoDFS的地址变了也不影响)。
+- `videoState` 视频状态:0 未采集,1 采集中,2 有视频,3 没有视频(YouTube上只有一张图片),4 后台删除了视频,5 采集失败。3、4 表示没有视频;0、1、5 还不确定,打开视频页时调用 `/api/music/video`。采集平台的搜索结果(`id` 为0)固定为0。
+- `collect.videoUrl`、`collect.videoInfoUrl`:没有启用视频采集时为 null。见下面的"视频"。
 - 目标音质 `bitRate`(默认320):返回不超过这个音质的最高音质文件;所有文件都超过时返回最低音质的文件。比特率999及以上为无损。
 
 | 接口 | 参数 | 说明 |
@@ -97,6 +109,7 @@
 | `GET /api/music/search` | `key` | 从曲库搜索,最多30条,按匹配程度排序 |
 | `GET /api/music/search_collect` | `key` | 从采集平台搜索,结果的 `id` 为0,播放用 `collect.url`;要加入歌单时先调用 `collect` |
 | `GET /api/music/detail` | `id`、`bitRate` | 歌曲详情 |
+| `GET /api/music/video` | `id` | 歌曲视频,见下面的"视频" |
 | `GET /api/music/lrc` | `id` | 歌词列表 `[{id, musicId, title, lrc, agreeCount, disagreeCount, state, source}]` |
 | `POST /api/music/collect` | `name`、`logo`、`platform`、`extra` | 采集平台的歌曲加入曲库,返回歌曲ID(已经加入过时直接返回) |
 | `POST /api/music/correct` | `id`、`name`、`artist`、`album` | 纠错,只提交要修改的字段 |
@@ -104,6 +117,34 @@
 | `GET /api/music/complaint_samples` | | 投诉理由的选项 |
 | `GET /api/music/upload/by_md5` | `md5` | 曲库里已经有这个文件时返回歌曲ID,没有时404 |
 | `POST /api/music/upload` | `name`(带扩展名的文件名,URL参数);请求体直接放文件内容 | 上传本地歌曲(mp3、flac、wav、ape、m4a、aac、ogg、wma,500MB以内),返回歌曲ID。后台处理完成之前 `file` 为 null |
+
+## 视频
+
+只有采集平台(YouTube)的歌曲有视频。服务器采集最高规格的原画(VP9、AV1等iPhone不能直接播放的编码转码成HEVC),原画的短边高于720时再转码一个720p的H.264流畅版。所有视频都是mp4(faststart,可以边下边播),支持断点续传。
+
+### GET /api/music/video?id=
+曲库里的歌曲的视频。还没有采集过(老的歌曲)、或者采集失败超过1小时时,调用这个接口会开始采集,返回 `state=1`。采集、转码过程中每隔3秒调用一次,直到可以播放。
+```json
+{
+  "state": 2,
+  "original": {
+    "id": 12, "quality": 1, "state": 1, "width": 3840, "height": 2160, "codec": "hevc",
+    "bitRate": 14400, "frameRate": 30, "duration": 223488, "size": 402653184, "md5": "...", "url": "播放地址"
+  },
+  "smooth": {"id": 13, "quality": 2, "state": 0, "width": 0, "height": 0, "codec": null, "...": "...", "url": null}
+}
+```
+- `state` 和歌曲的 `videoState` 相同。只有 `state=2` 时才有 `original`、`smooth`。
+- 视频文件的 `state`:0 转码中,1 可以播放,2 转码失败。可以播放时才有 `url`。
+- 先转码流畅版,再处理原画。`original`、`smooth` 在 `state=2` 时都不为 null;原画不高于720p时没有单独的流畅版,`smooth` 和 `original` 是同一个文件(`id` 相同)。
+- 缓存、下载的key用视频文件的 `id`。
+
+### 还没有收藏的歌曲(搜索结果)
+采集平台的搜索结果(`id` 为0)只能播放预览版(iPhone能直接播放的最高规格,一般是1080p H.264),直接访问采集服务,不需要token:
+1. `GET collect.videoInfoUrl` 返回纯文本:正好是 `OK` 表示可以播放;以"采集失败"开头表示失败;其他是进度文字。第一次请求时采集服务开始下载。
+2. 返回 `OK` 后播放 `collect.videoUrl`。
+
+采集服务的缓存保留24小时;加入曲库(`POST /api/music/collect`)时服务器同时开始采集视频。
 
 ## 歌单
 
@@ -141,7 +182,7 @@
 
 | 接口 | 参数 | 说明 |
 |---|---|---|
-| `POST /api/feedback/add` | `content`、`client` | 意见反馈,返回给用户看的提示文字 |
+| `POST /api/feedback/add` | `content`、`clientFlag` | 意见反馈,返回给用户看的提示文字 |
 
 ## 公开页面(不需要登录)
 
@@ -151,6 +192,17 @@
 | `/download.html` | App下载页 |
 | `GET /api/public/music?id=` | 分享页使用的歌曲信息 |
 | `GET /api/public/download_info` | 下载页使用的信息 |
+
+## 开发测试
+
+服务端以 `--mock-email` 启动时(只用于开发和测试),验证码不发送邮件,并且不限制同一个邮箱的发送间隔。自动测试可以从本机获取验证码:
+
+### GET /api/dev/email_code
+参数:`email`。返回这个邮箱最近一次发送的、还有效的验证码,没有时返回 `null`。
+```json
+{"type": "BIND_EMAIL", "code": "995314", "date": 1794057600000}
+```
+`type`:REGISTER:注册 RESET_PWD:重置密码 BIND_EMAIL:绑定邮箱。没有开启 `--mock-email`,或者不是从本机(127.0.0.1)访问时返回404。
 
 ## 和老版本(Kotlin版 /client/**)的区别
 
@@ -162,5 +214,6 @@
 - 曲库搜索和采集平台搜索分成两个接口,客户端可以先显示曲库的结果。
 - 歌曲统一为一种结构,不再把空的歌手、专辑替换成"未知"。
 - 推荐歌单不再需要 `colNum` 参数和 `hashId`。
+- 客户端编号统一为 `clientFlag`(0:WEB 1:Android 2:IOS 3:Windows 4:Mac 5:Linux),检查更新、意见反馈也使用这个编号(老版本是 1:Windows 2:Mac 3:Linux 4:Android 5:Ios)。
 - 分享链接直接使用歌曲ID,去掉了 `decode_param`。
 - 只能查看自己的歌单和推荐的歌单(老版本知道ID就能查看任何人的歌单)。

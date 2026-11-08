@@ -70,6 +70,7 @@ cargo build --release -p DairoMUSIC
 | `--dfs-url` | `DAIRO_MUSIC_DFS_URL` | http://127.0.0.1:8031 | DairoDFS的地址（服务端调用，同一台机器或内网时用内网地址） |
 | `--dfs-public-url` | `DAIRO_MUSIC_DFS_PUBLIC_URL` | 和`--dfs-url`相同 | DairoDFS对外的地址，客户端播放歌曲、显示图片时使用 |
 | `--dfs-token` | `DAIRO_MUSIC_DFS_TOKEN` | | DairoDFS的API票据，建议通过环境变量传入 |
+| `--mock-email` | `DAIRO_MUSIC_MOCK_EMAIL` | 不开启 | 模拟发送邮件，**只用于开发和测试**：验证码不发送邮件，只记录到日志，并且可以从本机通过`GET /api/dev/email_code?email=`获取 |
 
 # 6. 文档
 

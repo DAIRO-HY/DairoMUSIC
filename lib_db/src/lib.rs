@@ -12,13 +12,13 @@ use std::time::Duration;
 struct Assets;
 
 /// 数据库版本号
-const VERSION: i32 = 1;
+const VERSION: i32 = 3;
 
 /// 数据库文件名
 pub const DB_FILE_NAME: &str = "dairo-music.sqlite";
 
 /// 建表顺序(init_data.sql是全新安装时的初始数据,放在最后)
-const SQL_FILES: [&str; 22] = [
+const SQL_FILES: [&str; 23] = [
     "admin.sql",
     "admin_token.sql",
     "admin_role.sql",
@@ -34,6 +34,7 @@ const SQL_FILES: [&str; 22] = [
     "music_correct.sql",
     "music_file.sql",
     "music_lrc.sql",
+    "music_video.sql",
     "swiper.sql",
     "system_config.sql",
     "useful.sql",
@@ -42,6 +43,22 @@ const SQL_FILES: [&str; 22] = [
     "user_login.sql",
     "user_music.sql",
 ];
+
+/// 版本1升级到版本2:客户端编号统一为 0:WEB 1:Android 2:IOS 3:Windows 4:Mac 5:Linux
+/// 老的编号是 1:Windows 2:Mac 3:Linux 4:Android 5:Ios
+const UPGRADE_V2: &str = "
+alter table app_version rename column client to clientFlag;
+update app_version set clientFlag = case clientFlag when 1 then 3 when 2 then 4 when 3 then 5 when 4 then 1 when 5 then 2 else clientFlag end;
+alter table feedback rename column client to clientFlag;
+update feedback set clientFlag = case clientFlag when 1 then 3 when 2 then 4 when 3 then 5 when 4 then 1 when 5 then 2 else clientFlag end;
+";
+
+/// 版本2升级到版本3:增加歌曲视频
+const UPGRADE_V3: &str = "
+alter table music add column videoState INTEGER NOT NULL default 0;
+alter table music add column videoTime INT8;
+CREATE INDEX idx_music_video_state ON music (videoState);
+";
 
 /// 全新安装时的初始数据(菜单、超级管理员角色)
 const INIT_DATA_FILE: &str = "init_data.sql";
@@ -134,9 +151,20 @@ async fn upgrade(with_init_data: bool) -> Result<(), Box<dyn Error>> {
             execute_sql_file(&mut tx, INIT_DATA_FILE).await?;
         }
         tx.commit().await?;
+    } else {
+        //每个版本的升级在一个事务里完成,中途失败时不会只升级一半
+        if version < 2 {
+            let mut tx = (&mut *conn).begin().await?;
+            sqlx::raw_sql(UPGRADE_V2).execute(&mut *tx).await?;
+            tx.commit().await?;
+        }
+        if version < 3 {
+            let mut tx = (&mut *conn).begin().await?;
+            sqlx::raw_sql(UPGRADE_V3).execute(&mut *tx).await?;
+            execute_sql_file(&mut tx, "music_video.sql").await?;
+            tx.commit().await?;
+        }
     }
-
-    //以后的版本升级写在这里,每个版本一个事务
 
     //设置数据库版本号(版本号没变时不写库)
     if version != VERSION as i64 {
