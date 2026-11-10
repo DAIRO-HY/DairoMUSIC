@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>修改密码</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="form" class="app-form" action="/admin/api/common/modify_pwd" onsubmit="onSubmitClick();return false;">
+            <div class="mb-3">
+                <label class="form-label">当前密码</label>
+                <input name="oldPwd" class="form-control" type="password" autocomplete="current-password" style="max-width: 320px">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">新密码</label>
+                <input name="pwd" class="form-control" type="password" placeholder="6~32位" autocomplete="new-password" style="max-width: 320px">
+            </div>
+            <div class="mb-4">
+                <label class="form-label">确认新密码</label>
+                <input id="pwd2" class="form-control" type="password" autocomplete="new-password" style="max-width: 320px">
+            </div>
+            <button type="submit" class="btn btn-primary px-4">保存</button>
+        </form>
+    </div>
+</main>
+<script>
+    function onSubmitClick() {
+        if ($("input[name='pwd']").val() !== $("#pwd2").val()) {
+            alert("两次输入的新密码不一致")
+            return
+        }
+        $("#form").ajaxByForm().success(() => {
+            alert("密码已修改,请重新登录")
+            location.href = "/admin/login.html"
+        }).post()
+    }
+</script>
+</body>
+</html>

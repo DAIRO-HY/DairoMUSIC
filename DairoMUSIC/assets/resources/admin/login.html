@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>登录 - DairoMUSIC</title>
+</head>
+<body>
+<div class="login-page">
+    <div class="login-card">
+        <div class="text-center mb-4">
+            <span class="login-logo"><i class="bi bi-music-note-beamed"></i></span>
+            <h1 class="fs-4 fw-semibold mt-3 mb-1">DairoMUSIC</h1>
+            <div class="text-secondary small">后台管理系统</div>
+        </div>
+        <form id="form" action="/admin/api/login/do_login" onsubmit="onLoginClick();return false;">
+            <div class="mb-3">
+                <input name="name" class="form-control" type="text" placeholder="登录名" autocomplete="username" autofocus>
+            </div>
+            <div class="mb-4">
+                <input name="pwd" class="form-control" type="password" placeholder="密码" autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-primary w-100">登 录</button>
+        </form>
+    </div>
+</div>
+<script>
+    $(function () {
+        //还没有创建管理员时进入安装向导
+        $.ajaxByData("/admin/api/install/status").hide().success(data => {
+            if (!data.isInit) {
+                location.replace("/admin/install.html")
+            }
+        }).get()
+    })
+
+    function onLoginClick() {
+        $("#form").ajaxByForm().success(() => {
+            location.href = "/admin/index.html"
+        }).post()
+    }
+</script>
+</body>
+</html>

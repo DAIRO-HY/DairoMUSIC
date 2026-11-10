@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <meta name="menu" content="/admin/admin_menu_list.html">
+    <title>编辑菜单</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="form" class="app-form" action="/admin/api/menu/edit" onsubmit="onSubmitClick();return false;">
+            <input type="hidden" name="id">
+            <div class="mb-3">
+                <label class="form-label">名称</label>
+                <input name="name" class="form-control" autocomplete="off" style="max-width: 280px">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">上级菜单</label>
+                <select name="parentId" class="form-select" style="max-width: 280px"></select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">图标 <span class="text-secondary small">(一级菜单显示,如 music-note-beamed)</span></label>
+                <div class="input-group" style="max-width: 280px">
+                    <span class="input-group-text"><i id="icoPreview" class="bi"></i></span>
+                    <input name="ico" class="form-control" autocomplete="off">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">链接 <span class="text-secondary small">(有子菜单的分组留空)</span></label>
+                <input name="url" class="form-control" autocomplete="off" placeholder="/admin/xxx.html">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">排序号 <span class="text-secondary small">(越小越靠前)</span></label>
+                <input name="orderNum" class="form-control" type="number" style="max-width: 160px">
+            </div>
+            <div class="mb-4">
+                <label class="form-label d-block">状态</label>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="state" value="1" id="state1">
+                    <label class="form-check-label" for="state1">启用</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="state" value="0" id="state0">
+                    <label class="form-check-label" for="state0">禁用</label>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary px-4">保存</button>
+            <a class="btn btn-light ms-2" href="/admin/admin_menu_list.html">返回</a>
+        </form>
+    </div>
+</main>
+<script>
+    $(function () {
+        const id = getParam("id", "0")
+        $.ajaxByData("/admin/api/menu/parents").success(parents => {
+            fillOptions("select[name='parentId']", [{value: 0, text: "一级菜单"}].concat(parents.filter(it => String(it.value) !== id)))
+            $.ajaxByData("/admin/api/menu/detail").add("id", id).success(data => {
+                $("#form").bindValue(data)
+                previewIco()
+            }).get()
+        }).get()
+        $("input[name='ico']").on("input", previewIco)
+    })
+
+    function previewIco() {
+        $("#icoPreview").attr("class", "bi bi-" + $("input[name='ico']").val())
+    }
+
+    function onSubmitClick() {
+        $("#form").ajaxByForm().success(() => {
+            try {
+                sessionStorage.removeItem(MENU_CACHE_KEY)
+            } catch {
+            }
+            location.href = "/admin/admin_menu_list.html"
+        }).post()
+    }
+</script>
+</body>
+</html>

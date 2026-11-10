@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>初始化 - DairoMUSIC</title>
+</head>
+<body>
+<div class="login-page">
+    <div class="login-card">
+        <div class="text-center mb-4">
+            <span class="login-logo"><i class="bi bi-stars"></i></span>
+            <h1 class="fs-4 fw-semibold mt-3 mb-1">欢迎使用 DairoMUSIC</h1>
+            <div class="text-secondary small">请先创建超级管理员账号</div>
+        </div>
+        <form id="form" action="/admin/api/install/create_admin" onsubmit="onSubmitClick();return false;">
+            <div class="mb-3">
+                <input name="name" class="form-control" type="text" placeholder="登录名(2~20位)" autocomplete="username" autofocus>
+            </div>
+            <div class="mb-3">
+                <input name="pwd" class="form-control" type="password" placeholder="密码(6~32位)" autocomplete="new-password">
+            </div>
+            <div class="mb-4">
+                <input id="pwd2" class="form-control" type="password" placeholder="再次输入密码" autocomplete="new-password">
+            </div>
+            <button type="submit" class="btn btn-primary w-100">创 建</button>
+        </form>
+    </div>
+</div>
+<script>
+    $(function () {
+        $.ajaxByData("/admin/api/install/status").hide().success(data => {
+            if (data.isInit) {
+                location.replace("/admin/login.html")
+            }
+        }).get()
+    })
+
+    function onSubmitClick() {
+        if ($("input[name='pwd']").val() !== $("#pwd2").val()) {
+            alert("两次输入的密码不一致")
+            return
+        }
+        $("#form").ajaxByForm().success(() => {
+            alert("创建成功,请登录")
+            location.replace("/admin/login.html")
+        }).post()
+    }
+</script>
+</body>
+</html>

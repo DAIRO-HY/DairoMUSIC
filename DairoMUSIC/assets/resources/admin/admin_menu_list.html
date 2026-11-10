@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>导航菜单</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <div class="app-toolbar">
+            <div class="text-secondary small">左侧菜单栏的菜单,最多两级;图标使用 <a href="https://icons.getbootstrap.com/" target="_blank" rel="noopener">Bootstrap Icons</a> 的图标名</div>
+            <a class="btn btn-primary ms-auto" href="/admin/admin_menu_edit.html"><i class="bi bi-plus-lg me-1"></i>添加菜单</a>
+        </div>
+        <div id="table"></div>
+    </div>
+</main>
+<script>
+    const table = new PageTable({
+        el: "#table",
+        url: "/admin/api/menu/list",
+        paging: false,
+        columns: [
+            {
+                title: "菜单名", render: it => it.parentId === 0
+                    ? `<i class="bi bi-${escapeHtml(it.ico || "circle")} me-2 text-secondary"></i><span class="fw-semibold">${escapeHtml(it.name)}</span>`
+                    : `<span class="ps-4 text-secondary">└</span> ${escapeHtml(it.name)}`
+            },
+            {title: "链接", render: it => it.url ? `<code>${escapeHtml(it.url)}</code>` : ""},
+            {title: "排序号", data: "orderNum"},
+            {title: "状态", render: it => it.state === 1 ? badge("启用", "success") : badge("禁用")}
+        ],
+        actions: [
+            {icon: "bi-pencil-square", title: "编辑", onClick: it => location.href = "/admin/admin_menu_edit.html?id=" + it.id},
+            {
+                icon: "bi-trash3", title: "删除", danger: true, onClick: it => confirmDo(`确定要删除菜单【${it.name}】吗?`, () => {
+                    $.ajaxByData("/admin/api/menu/delete").add("id", it.id).success(() => {
+                        try {
+                            sessionStorage.removeItem(MENU_CACHE_KEY)
+                        } catch {
+                        }
+                        table.load()
+                    }).delete()
+                })
+            }
+        ]
+    })
+    $(() => table.load())
+</script>
+</body>
+</html>

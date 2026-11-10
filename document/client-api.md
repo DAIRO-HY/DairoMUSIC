@@ -30,7 +30,7 @@
 - `serverId`:服务器唯一标识,服务器第一次启动时生成,之后不会改变。服务器的域名、端口变了也不变,客户端可以用来区分不同服务器的缓存。
 - `allowRegister` 为 false 时隐藏注册和"免注册使用"。
 - `allowSaveAlbum`:是否允许把下载的视频保存到相册(后台"系统配置"里设置)。为 false 时下载视频不询问是否保存到相册。
-- `allowDownloadMusic`:是否允许下载歌曲(后台"系统配置"里设置,默认允许)。为 false 时隐藏歌曲的下载按钮(歌曲详情的下载、歌单的全部下载),已经下载的歌曲仍可以播放和删除。下载时选择音质使用 `/api/music/detail?id=&bitRate=`、`/api/favorite/musics?id=&bitRate=`。
+- `allowDownloadMusic`:是否允许下载歌曲(后台"系统配置"里设置,默认允许)。为 false 时隐藏歌曲的下载按钮(歌曲详情的下载、歌单的全部下载),已经下载的歌曲仍可以播放和删除。下载时从歌曲的 `files` 里选择音质。
 - `allowDownloadVideo`:是否允许下载视频(后台"系统配置"里设置,默认允许)。为 false 时隐藏视频的下载按钮,已经下载的视频仍可以播放和删除;`allowSaveAlbum` 只在允许下载视频时有意义。
 
 ### GET /api/app_version/check
@@ -82,14 +82,20 @@
   "album": "叶惠美",
   "logo": "封面地址",
   "duration": 269000,
-  "maxBitRate": 320,
   "videoState": 2,
   "favoriteId": 1,
-  "file": {
-    "id": 203338, "md5": "文件的MD5,老数据可能为null",
-    "bitRate": 320, "sampleRate": 44100, "dataStartPosition": null, "sampleCount": null, "frameLength": null,
-    "size": 11401115, "format": "mp3", "url": "播放地址(支持断点续传)"
-  },
+  "files": [
+    {
+      "id": 203337, "md5": "文件的MD5,老数据可能为null",
+      "bitRate": 128, "sampleRate": 44100, "dataStartPosition": null, "sampleCount": null, "frameLength": null,
+      "size": 4560446, "format": "mp3", "url": "播放地址(支持断点续传)"
+    },
+    {
+      "id": 203338, "md5": "...",
+      "bitRate": 320, "sampleRate": 44100, "dataStartPosition": null, "sampleCount": null, "frameLength": null,
+      "size": 11401115, "format": "mp3", "url": "播放地址(支持断点续传)"
+    }
+  ],
   "collect": {
     "platform": "YT", "extra": "采集参数", "url": "采集平台的播放地址",
     "videoUrl": "采集平台的视频预览地址", "videoInfoUrl": "视频预览的采集进度地址"
@@ -98,17 +104,17 @@
 ```
 - `artist`、`album` 可能为 null,由客户端决定显示什么。
 - `favoriteId` 只有歌单里的歌曲才有。
-- `file` 为 null 表示还没有采集完成,可以用 `collect.url` 播放。
-- `file.id` 是文件ID,不会改变,可以用来做缓存的key(DairoDFS的地址变了也不影响)。
+- `files` 是这首歌所有音质的文件,按 `bitRate` 从低到高排序;空数组表示还没有采集完成,可以用 `collect.url` 播放。
+- 文件的 `id` 是文件ID,不会改变,可以用来做缓存的key(DairoDFS的地址变了也不影响)。
 - `videoState` 视频状态:0 未采集,1 采集中,2 有视频,3 没有视频(YouTube上只有一张图片),4 后台删除了视频,5 采集失败。3、4 表示没有视频;0、1、5 还不确定,打开视频页时调用 `/api/music/video`。采集平台的搜索结果(`id` 为0)固定为0。
 - `collect.videoUrl`、`collect.videoInfoUrl`:没有启用视频采集时为 null。见下面的"视频"。
-- 目标音质 `bitRate`(默认320):返回不超过这个音质的最高音质文件;所有文件都超过时返回最低音质的文件。比特率999及以上为无损。
+- 由客户端按"播放音质"设置从 `files` 里选择文件:不超过设置的最高音质文件;所有文件都超过时用最低音质的文件。比特率999及以上为无损。最高音质就是 `files` 的最后一个。
 
 | 接口 | 参数 | 说明 |
 |---|---|---|
 | `GET /api/music/search` | `key` | 从曲库搜索,最多30条,按匹配程度排序 |
 | `GET /api/music/search_collect` | `key` | 从采集平台搜索,结果的 `id` 为0,播放用 `collect.url`;要加入歌单时先调用 `collect` |
-| `GET /api/music/detail` | `id`、`bitRate` | 歌曲详情 |
+| `GET /api/music/detail` | `id` | 歌曲详情 |
 | `GET /api/music/video` | `id` | 歌曲视频,见下面的"视频" |
 | `GET /api/music/lrc` | `id` | 歌词列表 `[{id, musicId, title, lrc, agreeCount, disagreeCount, state, source}]` |
 | `POST /api/music/collect` | `name`、`logo`、`platform`、`extra` | 采集平台的歌曲加入曲库,返回歌曲ID(已经加入过时直接返回) |
@@ -116,11 +122,11 @@
 | `POST /api/music/complaint` | `id`、`content` | 投诉 |
 | `GET /api/music/complaint_samples` | | 投诉理由的选项 |
 | `GET /api/music/upload/by_md5` | `md5` | 曲库里已经有这个文件时返回歌曲ID,没有时404 |
-| `POST /api/music/upload` | `name`(带扩展名的文件名,URL参数);请求体直接放文件内容 | 上传本地歌曲(mp3、flac、wav、ape、m4a、aac、ogg、wma,500MB以内),返回歌曲ID。后台处理完成之前 `file` 为 null |
+| `POST /api/music/upload` | `name`(带扩展名的文件名,URL参数);请求体直接放文件内容 | 上传本地歌曲(mp3、flac、wav、ape、m4a、aac、ogg、wma,500MB以内),返回歌曲ID。后台处理完成之前 `files` 为空数组 |
 
 ## 视频
 
-只有采集平台(YouTube)的歌曲有视频。服务器采集最高规格的原画(VP9、AV1等iPhone不能直接播放的编码转码成HEVC),原画的短边高于720时再转码一个720p的H.264流畅版。所有视频都是mp4(faststart,可以边下边播),支持断点续传。
+只有采集平台(YouTube)的歌曲有视频。服务器采集最高规格的原画(VP9、AV1等iPhone不能直接播放的编码转码成HEVC),原画的短边高于480或帧率高于25时,再转码一个480p 25fps的H.264流畅版(短边不到480的不放大,只降帧率)。所有视频都是mp4(faststart,可以边下边播),支持断点续传。
 
 ### GET /api/music/video?id=
 曲库里的歌曲的视频。还没有采集过(老的歌曲)、或者采集失败超过1小时时,调用这个接口会开始采集,返回 `state=1`。采集、转码过程中每隔3秒调用一次,直到可以播放。
@@ -136,7 +142,7 @@
 ```
 - `state` 和歌曲的 `videoState` 相同。只有 `state=2` 时才有 `original`、`smooth`。
 - 视频文件的 `state`:0 转码中,1 可以播放,2 转码失败。可以播放时才有 `url`。
-- 先转码流畅版,再处理原画。`original`、`smooth` 在 `state=2` 时都不为 null;原画不高于720p时没有单独的流畅版,`smooth` 和 `original` 是同一个文件(`id` 相同)。
+- 先转码流畅版,再处理原画。`original`、`smooth` 在 `state=2` 时都不为 null;原画不高于480p 25fps时没有单独的流畅版,`smooth` 和 `original` 是同一个文件(`id` 相同)。
 - 缓存、下载的key用视频文件的 `id`。
 
 ### 还没有收藏的歌曲(搜索结果)
@@ -165,8 +171,8 @@
 | `POST /api/favorite/logo` | multipart:`id`、`file` | 上传封面,返回封面地址 |
 | `DELETE /api/favorite/delete` | `id` | 删除歌单 |
 | `POST /api/favorite/sort` | `ids`(排好序的歌单ID,逗号分隔) | 歌单排序 |
-| `GET /api/favorite/musics` | `id`、`bitRate` | 歌单里的歌曲,最近添加的在前面 |
-| `GET /api/favorite/all_musics` | `bitRate` | 我所有歌单里的歌曲 |
+| `GET /api/favorite/musics` | `id` | 歌单里的歌曲,最近添加的在前面 |
+| `GET /api/favorite/all_musics` | | 我所有歌单里的歌曲 |
 | `POST /api/favorite/add_music` | `favoriteId`、`musicId` | 添加歌曲到歌单 |
 | `DELETE /api/favorite/remove_music` | `favoriteId`、`musicId` | 从歌单删除歌曲 |
 

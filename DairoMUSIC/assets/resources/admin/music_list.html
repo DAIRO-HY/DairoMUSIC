@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>歌曲列表</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="search" class="app-toolbar">
+            <input name="id" class="form-control" placeholder="ID" type="number" style="width: 110px">
+            <input name="name" class="form-control" placeholder="歌名" style="width: 170px">
+            <input name="artist" class="form-control" placeholder="歌手" style="width: 140px">
+            <input name="album" class="form-control" placeholder="专辑" style="width: 140px">
+            <select name="state" class="form-select" style="width: 130px"></select>
+            <select name="deleteFlag" class="form-select" style="width: 120px">
+                <option value="">全部</option>
+                <option value="0" selected>未删除</option>
+                <option value="1">已删除</option>
+            </select>
+            <button class="btn btn-outline-primary" type="submit"><i class="bi bi-search me-1"></i>查询</button>
+        </form>
+        <div id="table"></div>
+    </div>
+</main>
+<script>
+    const table = new PageTable({
+        el: "#table",
+        url: "/admin/api/music/list",
+        search: "#search",
+        columns: [
+            {title: "", render: it => logoHtml(it.logoUrl)},
+            {title: "ID", data: "id", sortKey: "id"},
+            {title: "歌名", render: it => `<div class="d-flex align-items-center gap-1">${ellipsis(it.name, 360)}${it.deleteFlag === 1 ? badge("已删除", "danger") : ""}</div>`, sortKey: "name"},
+            {title: "歌手", render: it => it.artist ? ellipsis(it.artist, 140) : `<span class="text-secondary">未知</span>`, sortKey: "artist"},
+            {title: "专辑", render: it => it.album ? ellipsis(it.album, 140) : `<span class="text-secondary">未知</span>`, sortKey: "album"},
+            {title: "时长", render: it => formatDuration(it.duration), sortKey: "duration"},
+            {title: "播放", data: "playCount", sortKey: "playCount"},
+            {title: "音质", render: it => bitRateText(it.maxBitRate), sortKey: "maxBitRate"},
+            {title: "状态", render: it => musicStateBadge(it.state), sortKey: "state", className: "text-nowrap"},
+            {title: "采集时间", render: it => formatTime(it.date), sortKey: "date", className: "text-nowrap"}
+        ],
+        actions: [
+            {icon: "bi-pencil-square", title: "编辑", onClick: it => location.href = "/admin/music_edit.html?id=" + it.id},
+            {
+                icon: "bi-trash3", title: "删除", danger: true, show: it => it.deleteFlag === 0, onClick: it => confirmDo(`确定要删除歌曲【${it.name}】吗?`, () => {
+                    $.ajaxByData("/admin/api/music/delete").add("id", it.id).success(() => table.load()).post()
+                })
+            },
+            {
+                icon: "bi-arrow-counterclockwise", title: "恢复", show: it => it.deleteFlag === 1, onClick: it => {
+                    $.ajaxByData("/admin/api/music/restore").add("id", it.id).success(() => table.load()).post()
+                }
+            }
+        ]
+    })
+    $(function () {
+        fillOptions("select[name='state']", MUSIC_STATES, "全部状态")
+        table.load()
+    })
+</script>
+</body>
+</html>

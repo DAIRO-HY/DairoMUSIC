@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <meta name="menu" content="/admin/admin_role_list.html">
+    <title>菜单权限</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <div class="app-toolbar">
+            <div class="text-secondary small">勾选的菜单会显示在这个角色的左侧菜单栏里,同时可以使用菜单对应的功能</div>
+            <div class="ms-auto">
+                <button class="btn btn-light" type="button" onclick="checkAll(true)">全选</button>
+                <button class="btn btn-light" type="button" onclick="checkAll(false)">全不选</button>
+            </div>
+        </div>
+        <div id="menus" class="row g-3"></div>
+        <div class="mt-4">
+            <button type="button" class="btn btn-primary px-4" onclick="onSaveClick()">保存</button>
+            <a class="btn btn-light ms-2" href="/admin/admin_role_list.html">返回</a>
+        </div>
+    </div>
+</main>
+<script>
+    const roleId = getParam("roleId", "0")
+
+    $(function () {
+        $.ajaxByData("/admin/api/role/detail").add("id", roleId).hide().success(data => {
+            document.title = "菜单权限 - " + data.name
+            $("#appTitle").text(document.title)
+        }).get()
+        $.ajaxByData("/admin/api/role/permission").add("roleId", roleId).success(render).get()
+    })
+
+    function checkbox(it, parentId) {
+        const disabled = it.state === 1 ? "" : `<span class="text-secondary small ms-1">(已禁用)</span>`
+        return `<div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="${it.id}" id="menu${it.id}" data-parent="${parentId}" ${it.checked ? "checked" : ""}>
+                    <label class="form-check-label" for="menu${it.id}">${escapeHtml(it.name)}${disabled}</label>
+                </div>`
+    }
+
+    function render(list) {
+        let html = ""
+        list.filter(it => it.parentId === 0).forEach(top => {
+            const children = list.filter(it => it.parentId === top.id)
+            html += `<div class="col-12 col-md-6 col-xl-4"><div class="border rounded-3 p-3 h-100">
+                        <div class="fw-semibold mb-2">${checkbox(top, 0)}</div>
+                        <div class="ps-4">${children.map(it => checkbox(it, top.id)).join("")}</div>
+                     </div></div>`
+        })
+        $("#menus").html(html)
+
+        //勾选子菜单时自动勾选上级菜单,取消上级菜单时取消所有子菜单
+        $("#menus input").on("change", function () {
+            const parent = $(this).data("parent")
+            if (parent !== 0 && this.checked) {
+                $("#menu" + parent).prop("checked", true)
+            }
+            if (parent === 0) {
+                $(`#menus input[data-parent='${this.value}']`).prop("checked", this.checked)
+            }
+        })
+    }
+
+    function checkAll(checked) {
+        $("#menus input").prop("checked", checked)
+    }
+
+    function onSaveClick() {
+        const ids = $("#menus input:checked").map((_, it) => it.value).get().join(",")
+        $.ajaxByData("/admin/api/role/save_permission").add("roleId", roleId).add("menuIds", ids).success(() => {
+            try {
+                sessionStorage.removeItem(MENU_CACHE_KEY)
+            } catch {
+            }
+            location.href = "/admin/admin_role_list.html"
+        }).post()
+    }
+</script>
+</body>
+</html>

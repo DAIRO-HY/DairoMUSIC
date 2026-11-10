@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>管理员列表</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="search" class="app-toolbar">
+            <input name="name" class="form-control" placeholder="登录名" style="width: 180px">
+            <select name="roleId" class="form-select" style="width: 160px"></select>
+            <button class="btn btn-outline-primary" type="submit"><i class="bi bi-search me-1"></i>查询</button>
+            <a class="btn btn-primary ms-auto" href="/admin/admin_edit.html"><i class="bi bi-plus-lg me-1"></i>添加管理员</a>
+        </form>
+        <div id="table"></div>
+    </div>
+</main>
+<script>
+    const table = new PageTable({
+        el: "#table",
+        url: "/admin/api/admin/list",
+        search: "#search",
+        columns: [
+            {title: "ID", data: "id", sortKey: "id"},
+            {title: "登录名", data: "name", sortKey: "name"},
+            {title: "姓名", data: "realName"},
+            {title: "角色", render: it => it.roleName ? escapeHtml(it.roleName) : badge("角色已删除", "danger")},
+            {title: "状态", render: it => stateBadge(it.state), sortKey: "state"},
+            {title: "开通时间", render: it => formatTime(it.date), sortKey: "date", className: "text-nowrap"},
+            {title: "最后登录", render: it => formatTime(it.lastLoginTime), sortKey: "lastLoginTime", className: "text-nowrap"}
+        ],
+        actions: [
+            {icon: "bi-pencil-square", title: "编辑", onClick: it => location.href = "/admin/admin_edit.html?id=" + it.id},
+            {
+                icon: "bi-trash3", title: "删除", danger: true, onClick: it => confirmDo(`确定要删除管理员【${it.name}】吗?`, () => {
+                    $.ajaxByData("/admin/api/admin/delete").add("id", it.id).success(() => table.load()).delete()
+                })
+            }
+        ]
+    })
+    $(function () {
+        $.ajaxByData("/admin/api/admin/roles").hide().success(data => fillOptions("select[name='roleId']", data, "全部角色")).get()
+        table.load()
+    })
+</script>
+</body>
+</html>

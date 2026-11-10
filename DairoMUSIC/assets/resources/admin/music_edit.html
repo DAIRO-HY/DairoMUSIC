@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <meta name="menu" content="/admin/music_list.html">
+    <title>编辑歌曲</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="row g-3">
+        <div class="col-12 col-lg-4 col-xl-3">
+            <div class="app-card text-center">
+                <div id="logo" class="mb-3"></div>
+                <input id="logoFile" type="file" accept="image/jpeg,image/png,image/webp" class="d-none" onchange="onLogoChange(this)">
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="$('#logoFile').click()"><i class="bi bi-image me-1"></i>更换封面</button>
+                <hr>
+                <dl class="row small text-start mb-0" id="info"></dl>
+            </div>
+        </div>
+        <div class="col-12 col-lg-8 col-xl-9">
+            <div class="app-card">
+                <form id="form" class="app-form" action="/admin/api/music/edit" onsubmit="onSubmitClick();return false;">
+                    <input type="hidden" name="id">
+                    <div class="mb-3">
+                        <label class="form-label">歌名</label>
+                        <input name="name" class="form-control" autocomplete="off">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">歌手</label>
+                        <input name="artist" class="form-control" autocomplete="off" style="max-width: 320px">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">专辑</label>
+                        <input name="album" class="form-control" autocomplete="off" style="max-width: 320px">
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label">状态</label>
+                        <select name="state" class="form-select" style="max-width: 200px"></select>
+                    </div>
+                    <button type="submit" class="btn btn-primary px-4">保存</button>
+                    <a class="btn btn-light ms-2" href="javascript:history.back()">返回</a>
+                </form>
+            </div>
+            <div class="app-card">
+                <div class="app-card-title">歌曲文件</div>
+                <div id="files"></div>
+            </div>
+            <div id="videoCard" class="app-card d-none">
+                <div class="app-card-title d-flex align-items-center flex-wrap gap-2">视频 <span id="videoState"></span>
+                    <span class="ms-auto"></span>
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="onRecollectVideoClick()"><i class="bi bi-arrow-repeat me-1"></i>重新采集</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="onDeleteVideoClick()"><i class="bi bi-trash me-1"></i>删除视频</button>
+                </div>
+                <div id="videos"></div>
+            </div>
+            <div id="collectCard" class="app-card d-none">
+                <div class="app-card-title d-flex align-items-center">采集信息
+                    <button type="button" class="btn btn-outline-primary btn-sm ms-auto" onclick="onRecollectClick()"><i class="bi bi-arrow-repeat me-1"></i>重新处理</button>
+                </div>
+                <dl id="collect" class="row small mb-0"></dl>
+            </div>
+        </div>
+    </div>
+</main>
+<script>
+    const id = getParam("id", "0")
+
+    $(function () {
+        fillOptions("select[name='state']", MUSIC_STATES)
+        $.ajaxByData("/admin/api/music/detail").add("id", id).success(data => {
+            $("#form").bindValue(data)
+            $("#logo").html(logoHtml(data.logoUrl, 180))
+            const rows = [
+                ["ID", data.id],
+                ["时长", formatDuration(data.duration)],
+                ["音质", bitRateText(data.maxBitRate)],
+                ["播放次数", data.playCount],
+                ["来源", escapeHtml(SOURCE_TYPES[data.sourceType] || "")],
+                ["采集时间", formatTime(data.date)],
+                ["删除状态", data.deleteFlag === 1 ? "已删除 " + formatTime(data.deleteTime) : "正常"]
+            ]
+            loadFiles()
+            loadCollect()
+            loadVideos(data.videoState)
+            $("#info").html(rows.map(([k, v]) => `<dt class="col-5 text-secondary fw-normal">${k}</dt><dd class="col-7">${v}</dd>`).join(""))
+        }).get()
+    })
+
+    /**
+     * 显示各种音质的文件,可以直接试听
+     */
+    function loadFiles() {
+        $.ajaxByData("/admin/api/music/files").add("id", id).hide().success(list => {
+            if (list.length === 0) {
+                $("#files").html(`<div class="text-secondary">没有文件</div>`)
+                return
+            }
+            let html = `<div class="table-responsive"><table class="table align-middle"><thead><tr><th>音质</th><th>格式</th><th>大小</th><th>采样率</th><th>试听</th></tr></thead><tbody>`
+            list.forEach(it => {
+                const player = it.url ? `<audio controls preload="none" src="${escapeHtml(it.url)}" style="height:32px;max-width:280px"></audio>` : `<span class="text-secondary small">未配置DairoDFS</span>`
+                html += `<tr><td>${bitRateText(it.bitRate)}</td><td>${escapeHtml(it.format)}</td><td>${formatSize(it.size)}</td><td>${it.sampleRate || ""}</td><td>${player}</td></tr>`
+            })
+            html += `</tbody></table></div>`
+            $("#files").html(html)
+        }).get()
+    }
+
+    /**
+     * 采集信息
+     */
+    function loadCollect() {
+        $.ajaxByData("/admin/api/music/collect").add("id", id).hide().success(data => {
+            if (!data) {
+                return
+            }
+            const STATES = {"-1": badge("等待处理", "secondary"), 0: badge("处理中", "info"), 1: badge("成功", "success"), 2: badge("失败", "danger")}
+            const PLATFORMS = {YT: "YouTube采集", UU: "会员上传"}
+            const rows = [
+                ["来源", escapeHtml(PLATFORMS[data.platform] || data.platform)],
+                ["参数", escapeHtml(data.extra)],
+                ["状态", STATES[data.state] || ""],
+                ["处理次数", data.downloadCount],
+                ["说明", escapeHtml(data.memo)],
+                ["更新时间", formatTime(data.updateTime)]
+            ]
+            $("#collect").html(rows.map(([k, v]) => `<dt class="col-3 col-xl-2 text-secondary fw-normal">${k}</dt><dd class="col-9 col-xl-10 text-break">${v}</dd>`).join(""))
+            $("#collectCard").removeClass("d-none")
+        }).get()
+    }
+
+    const VIDEO_STATES = {
+        0: badge("未采集", "secondary"), 1: badge("采集中", "info"), 2: badge("有视频", "success"),
+        3: badge("没有视频(只有图片)", "secondary"), 4: badge("已删除", "warning"), 5: badge("采集失败", "danger")
+    }
+
+    /**
+     * 视频(原画、流畅),可以直接预览
+     */
+    function loadVideos(state) {
+        $("#videoState").html(VIDEO_STATES[state] || "")
+        $.ajaxByData("/admin/api/music/videos").add("id", id).hide().success(list => {
+            if (list.length === 0) {
+                $("#videos").html(`<div class="text-secondary small">没有视频文件</div>`)
+            } else {
+                const QUALITIES = {1: "原画", 2: "流畅"}
+                const FILE_STATES = {0: badge("转码中", "info"), 1: badge("可以播放", "success"), 2: badge("失败", "danger")}
+                let html = `<div class="table-responsive"><table class="table align-middle"><thead><tr><th>清晰度</th><th>状态</th><th>规格</th><th>大小</th><th>说明</th><th>预览</th></tr></thead><tbody>`
+                list.forEach(it => {
+                    const spec = it.width ? `${it.width}x${it.height} ${escapeHtml(it.codec || "")} ${it.frameRate || ""}fps ${it.bitRate || ""}kbps` : ""
+                    const player = it.url ? `<video controls preload="none" src="${escapeHtml(it.url)}" style="max-width:240px;max-height:135px"></video>` : ""
+                    html += `<tr><td>${QUALITIES[it.quality] || it.quality}</td><td>${FILE_STATES[it.state] || ""}</td><td class="small">${spec}</td><td>${it.size ? formatSize(it.size) : ""}</td><td class="small text-break">${escapeHtml(it.memo || "")}</td><td>${player}</td></tr>`
+                })
+                html += `</tbody></table></div>`
+                $("#videos").html(html)
+            }
+            $("#videoCard").removeClass("d-none")
+        }).get()
+    }
+
+    function reloadVideos() {
+        $.ajaxByData("/admin/api/music/detail").add("id", id).hide().success(data => loadVideos(data.videoState)).get()
+    }
+
+    function onDeleteVideoClick() {
+        confirmDo("确定要删除这首歌的视频吗?删除后客户端不再显示视频,也不会再自动采集。", () => {
+            $.ajaxByData("/admin/api/music/delete_video").add("id", id).success(() => reloadVideos()).post()
+        })
+    }
+
+    function onRecollectVideoClick() {
+        confirmDo("确定要重新采集这首歌的视频吗?", () => {
+            $.ajaxByData("/admin/api/music/recollect_video").add("id", id).success(() => reloadVideos()).post()
+        })
+    }
+
+    function onRecollectClick() {
+        confirmDo("确定要重新处理这首歌吗?", () => {
+            $.ajaxByData("/admin/api/music/recollect").add("id", id).success(() => loadCollect()).post()
+        })
+    }
+
+    function onSubmitClick() {
+        $("#form").ajaxByForm().success(() => history.back()).post()
+    }
+
+    /**
+     * 上传封面
+     */
+    function onLogoChange(input) {
+        const file = input.files[0]
+        input.value = ""
+        if (!file) {
+            return
+        }
+        const form = new FormData()
+        form.append("id", id)
+        form.append("file", file)
+        $.ajax({url: "/admin/api/music/upload_logo", method: "POST", data: form, processData: false, contentType: false})
+            .done(url => $("#logo").html(logoHtml(url, 180)))
+            .fail(xhr => alert(xhr.responseText || "上传失败"))
+    }
+
+    const SOURCE_TYPES = {0: "后台上传", 1: "会员上传", 2: "采集平台"}
+</script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <meta name="menu" content="/admin/music_duplicate_list.html">
+    <title>歌曲去重</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <div class="alert alert-info small">
+            <i class="bi bi-info-circle me-1"></i>选择要保留的歌曲(默认音质最好的一首),勾选的其他歌曲会被标记为删除,
+            收藏了这些歌曲的歌单会自动改为收藏保留的歌曲。保留的歌曲没有封面时,会使用被删除歌曲的封面。
+        </div>
+        <div id="table"></div>
+        <div class="mt-3">
+            <button type="button" class="btn btn-primary px-4" onclick="onDistinctClick()"><i class="bi bi-intersect me-1"></i>去重</button>
+            <a class="btn btn-light ms-2" href="/admin/music_duplicate_list.html">返回</a>
+        </div>
+    </div>
+</main>
+<script>
+    let list = []
+
+    $(function () {
+        const name = getParam("name")
+        document.title = "歌曲去重 - " + name
+        $("#appTitle").text(document.title)
+        const http = $.ajaxByData("/admin/api/music_duplicate/same").add("name", name).add("ignoreArtist", getParam("ignoreArtist", "0"))
+        const artist = new URLSearchParams(location.search).get("artist")
+        if (artist != null) {
+            http.add("artist", artist)
+        }
+        http.success(data => {
+            list = data
+            render()
+        }).get()
+    })
+
+    function render() {
+        let html = `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr>
+                        <th>保留</th><th>合并</th><th></th><th>ID</th><th>歌名</th><th>歌手</th><th>专辑</th><th>时长</th><th>音质</th><th>大小</th><th>格式</th><th>播放</th><th>状态</th>
+                    </tr></thead><tbody>`
+        list.forEach((it, i) => {
+            html += `<tr>
+                <td><input class="form-check-input" type="radio" name="bestId" value="${it.id}" ${i === 0 ? "checked" : ""}></td>
+                <td><input class="form-check-input" type="checkbox" name="ids" value="${it.id}" checked></td>
+                <td>${logoHtml(it.logoUrl)}</td>
+                <td><a href="/admin/music_edit.html?id=${it.id}">${it.id}</a></td>
+                <td>${ellipsis(it.name, 300)}</td>
+                <td>${escapeHtml(it.artist || "未知")}</td>
+                <td>${escapeHtml(it.album || "")}</td>
+                <td>${formatDuration(it.duration)}</td>
+                <td>${bitRateText(it.maxBitRate)}</td>
+                <td>${formatSize(it.size)}</td>
+                <td>${escapeHtml(it.format || "")}</td>
+                <td>${it.playCount}</td>
+                <td>${musicStateBadge(it.state)}</td>
+            </tr>`
+        })
+        if (list.length === 0) {
+            html += `<tr><td colspan="13" class="text-center text-secondary py-5">已经没有重复的歌曲了</td></tr>`
+        }
+        html += `</tbody></table></div>`
+        $("#table").html(html)
+    }
+
+    function onDistinctClick() {
+        const bestId = $("input[name='bestId']:checked").val()
+        const ids = $("input[name='ids']:checked").map((_, it) => it.value).get().filter(it => it !== bestId)
+        if (!bestId || ids.length === 0) {
+            alert("请选择要保留的歌曲,并至少勾选一首要合并的歌曲")
+            return
+        }
+        confirmDo(`保留ID为${bestId}的歌曲,删除其他${ids.length}首,确定吗?`, () => {
+            $.ajaxByData("/admin/api/music_duplicate/distinct").add("ids", ids.join(",")).add("bestId", bestId).success(() => {
+                location.href = "/admin/music_duplicate_list.html"
+            }).post()
+        })
+    }
+</script>
+</body>
+</html>

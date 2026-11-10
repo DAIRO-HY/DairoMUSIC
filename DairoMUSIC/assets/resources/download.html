@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template /include/public-head}}
+    <title>DairoMUSIC 下载</title>
+</head>
+<body class="d-flex align-items-center py-4 px-3">
+<div class="public-card w-100 text-center">
+    <span class="app-logo"><i class="bi bi-music-note-beamed"></i></span>
+    <h1 class="fs-3 fw-semibold mt-3 mb-1 text-white">DairoMUSIC</h1>
+    <div class="text-secondary">海量歌曲,随时随地畅听</div>
+    <div class="d-grid gap-3 mt-5">
+        <a id="android" class="btn btn-accent btn-lg disabled" href="#"><i class="bi bi-android2 me-2"></i>Android 下载</a>
+        <div id="version" class="text-secondary small"></div>
+    </div>
+</div>
+<script>
+    $(function () {
+        $.getJSON("/api/public/download_info").done(data => {
+            if (data.androidUrl) {
+                $("#android").attr("href", data.androidUrl).removeClass("disabled")
+                $("#version").text("最新版本 " + (data.androidVersion || ""))
+            } else {
+                $("#version").text("暂未发布")
+            }
+        })
+    })
+</script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <meta name="menu" content="/admin/admin_role_list.html">
+    <title>编辑角色</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="form" class="app-form" action="/admin/api/role/edit" onsubmit="onSubmitClick();return false;">
+            <input type="hidden" name="id">
+            <div class="mb-3">
+                <label class="form-label">角色名</label>
+                <input name="name" class="form-control" autocomplete="off" style="max-width: 280px">
+            </div>
+            <div class="mb-4">
+                <label class="form-label">备注</label>
+                <textarea name="remark" class="form-control" rows="3"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary px-4">保存</button>
+            <a class="btn btn-light ms-2" href="/admin/admin_role_list.html">返回</a>
+        </form>
+    </div>
+</main>
+<script>
+    $(function () {
+        $.ajaxByData("/admin/api/role/detail").add("id", getParam("id", "0")).success(data => $("#form").bindValue(data)).get()
+    })
+
+    function onSubmitClick() {
+        $("#form").ajaxByForm().success(() => {
+            location.href = "/admin/admin_role_list.html"
+        }).post()
+    }
+</script>
+</body>
+</html>

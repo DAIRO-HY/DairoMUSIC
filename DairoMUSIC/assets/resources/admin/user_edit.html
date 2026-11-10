@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <meta name="menu" content="/admin/user_list.html">
+    <title>编辑会员</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <div id="profile" class="d-flex align-items-center mb-4 d-none">
+            <span id="logo" class="me-3"></span>
+            <div>
+                <div id="nick" class="fw-semibold fs-6"></div>
+                <div id="timeInfo" class="text-secondary small"></div>
+            </div>
+        </div>
+        <form id="form" class="app-form" action="/admin/api/user/edit" onsubmit="onSubmitClick();return false;">
+            <input type="hidden" name="id">
+            <div class="mb-3">
+                <label class="form-label">邮箱</label>
+                <input name="email" class="form-control" autocomplete="off" style="max-width: 320px">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">密码</label>
+                <input name="pwd" class="form-control" type="password" autocomplete="new-password" placeholder="6~32位" style="max-width: 320px">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">状态</label>
+                <select name="state" class="form-select" style="max-width: 160px">
+                    <option value="1">有效</option>
+                    <option value="0">无效</option>
+                    <option value="2">注销</option>
+                </select>
+            </div>
+            <div class="mb-4">
+                <label class="form-label d-block">信赖用户 <span class="text-secondary small">(拥有一些特殊权限)</span></label>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="friendFlag" value="1" id="friend1">
+                    <label class="form-check-label" for="friend1">是</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="friendFlag" value="0" id="friend0">
+                    <label class="form-check-label" for="friend0">否</label>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary px-4">保存</button>
+            <a class="btn btn-light ms-2" href="/admin/user_list.html">返回</a>
+        </form>
+    </div>
+</main>
+<script>
+    $(function () {
+        $.ajaxByData("/admin/api/user/detail").add("id", getParam("id", "0")).success(data => {
+            $("#form").bindValue(data)
+            if (data.id !== 0) {
+                $("input[name='pwd']").attr("placeholder", "不修改请留空")
+                $("#logo").html(logoHtml(data.logo, 56))
+                $("#nick").text(data.nick || "未设置昵称")
+                $("#timeInfo").text(`ID:${data.id}  注册:${formatTime(data.date)}  最后在线:${formatTime(data.lastLoginTime) || "-"}`)
+                $("#profile").removeClass("d-none")
+            }
+        }).get()
+    })
+
+    function onSubmitClick() {
+        $("#form").ajaxByForm().success(() => {
+            location.href = "/admin/user_list.html"
+        }).post()
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>角色列表</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <div class="app-toolbar">
+            <div class="text-secondary small">角色决定了管理员能看到哪些菜单、能使用哪些功能</div>
+            <a class="btn btn-primary ms-auto" href="/admin/admin_role_edit.html"><i class="bi bi-plus-lg me-1"></i>添加角色</a>
+        </div>
+        <div id="table"></div>
+    </div>
+</main>
+<script>
+    const table = new PageTable({
+        el: "#table",
+        url: "/admin/api/role/list",
+        paging: false,
+        columns: [
+            {title: "ID", data: "id"},
+            {title: "角色名", data: "name"},
+            {title: "备注", data: "remark"}
+        ],
+        actions: [
+            {icon: "bi-key", title: "菜单权限", onClick: it => location.href = "/admin/admin_permission.html?roleId=" + it.id},
+            {icon: "bi-pencil-square", title: "编辑", onClick: it => location.href = "/admin/admin_role_edit.html?id=" + it.id},
+            {
+                icon: "bi-trash3", title: "删除", danger: true, onClick: it => confirmDo(`确定要删除角色【${it.name}】吗?`, () => {
+                    $.ajaxByData("/admin/api/role/delete").add("id", it.id).success(() => table.load()).delete()
+                })
+            }
+        ]
+    })
+    $(() => table.load())
+</script>
+</body>
+</html>

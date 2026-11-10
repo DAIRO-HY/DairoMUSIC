@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>重复歌曲</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="search" class="app-toolbar">
+            <input name="name" class="form-control" placeholder="歌名" style="width: 180px">
+            <input name="artist" class="form-control" placeholder="歌手" style="width: 150px">
+            <div class="form-check form-switch ms-1">
+                <input class="form-check-input" type="checkbox" role="switch" name="ignoreArtist" value="1" id="ignoreArtist">
+                <label class="form-check-label" for="ignoreArtist">忽略歌手</label>
+            </div>
+            <button class="btn btn-outline-primary" type="submit"><i class="bi bi-search me-1"></i>查询</button>
+        </form>
+        <div id="table"></div>
+    </div>
+</main>
+<script>
+    const table = new PageTable({
+        el: "#table",
+        url: "/admin/api/music_duplicate/list",
+        search: "#search",
+        empty: "没有重复的歌曲",
+        columns: [
+            {title: "歌名", render: it => ellipsis(it.name, 420), sortKey: "name"},
+            {title: "歌手", render: it => $("#ignoreArtist").prop("checked") ? `<span class="text-secondary">-</span>` : escapeHtml(it.artist || "未知"), sortKey: "artist"},
+            {title: "重复数", render: it => badge(it.count, "warning"), sortKey: "count"}
+        ],
+        actions: [
+            {
+                icon: "bi-intersect", title: "去重", onClick: it => {
+                    const param = new URLSearchParams({name: it.name || ""})
+                    if ($("#ignoreArtist").prop("checked")) {
+                        param.set("ignoreArtist", "1")
+                    } else if (it.artist != null) {
+                        param.set("artist", it.artist)
+                    }
+                    location.href = "/admin/music_duplicate_handle.html?" + param
+                }
+            }
+        ]
+    })
+    $(function () {
+        $("#ignoreArtist").on("change", function () {
+            $("input[name='artist']").prop("disabled", this.checked)
+            table.load(1)
+        })
+        table.load()
+    })
+</script>
+</body>
+</html>

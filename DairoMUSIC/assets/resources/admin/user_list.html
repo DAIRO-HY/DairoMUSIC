@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>会员列表</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="search" class="app-toolbar">
+            <input name="id" class="form-control" placeholder="ID" type="number" style="width: 110px">
+            <input name="email" class="form-control" placeholder="邮箱" style="width: 200px">
+            <select name="state" class="form-select" style="width: 120px">
+                <option value="">全部状态</option>
+                <option value="1" selected>有效</option>
+                <option value="0">无效</option>
+                <option value="2">注销</option>
+            </select>
+            <button class="btn btn-outline-primary" type="submit"><i class="bi bi-search me-1"></i>查询</button>
+            <a class="btn btn-primary ms-auto" href="/admin/user_edit.html"><i class="bi bi-plus-lg me-1"></i>添加会员</a>
+        </form>
+        <div id="table"></div>
+    </div>
+</main>
+<script>
+    const USER_STATE = {0: badge("无效"), 1: badge("有效", "success"), 2: badge("注销", "warning")}
+    const yesNo = value => value === 1 ? badge("是", "primary") : `<span class="text-secondary">否</span>`
+    const table = new PageTable({
+        el: "#table",
+        url: "/admin/api/user/list",
+        search: "#search",
+        columns: [
+            {title: "", render: it => logoHtml(it.logo, 36)},
+            {title: "ID", data: "id", sortKey: "id"},
+            {title: "邮箱", data: "email", sortKey: "email"},
+            {title: "昵称", render: it => it.nick ? escapeHtml(it.nick) : `<span class="text-secondary">未设置</span>`},
+            {title: "状态", render: it => USER_STATE[it.state] || "", sortKey: "state"},
+            {title: "信赖用户", render: it => yesNo(it.friendFlag)},
+            {title: "临时用户", render: it => yesNo(it.tempFlag)},
+            {title: "注册时间", render: it => formatTime(it.date), sortKey: "date", className: "text-nowrap"},
+            {title: "最后在线", render: it => formatTime(it.lastLoginTime), sortKey: "lastLoginTime", className: "text-nowrap"}
+        ],
+        actions: [
+            {icon: "bi-pencil-square", title: "编辑", onClick: it => location.href = "/admin/user_edit.html?id=" + it.id}
+        ]
+    })
+    $(() => table.load())
+</script>
+</body>
+</html>

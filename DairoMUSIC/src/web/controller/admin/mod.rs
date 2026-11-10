@@ -1,0 +1,10 @@
+pub mod admin;
+pub mod common;
+pub mod install;
+pub mod login;
+pub mod menu;
+pub mod music;
+pub mod music_duplicate;
+pub mod role;
+pub mod system_config;
+pub mod user;

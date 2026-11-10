@@ -1,0 +1,56 @@
+[package]
+name = "DairoMUSIC"
+version = "2.0.0"
+edition = "2024"
+
+# build.rs 专用的依赖
+[build-dependencies]
+
+#build.rs里的异步运行时,与运行期统一使用tokio
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+lib_db = { path = "../lib_db" }
+sqlx-dsl-dao = "0.0.3"
+
+#注解路由代码生成
+hyperoute-codegen = "0.0.7"
+
+[dependencies]
+lib_db = { path = "../lib_db" }
+md5 = "0.8"
+chrono = "0.4"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "macros"] }
+
+#用来解析启动参数
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1.0"
+rand = { version = "0.10", features = ["std"] }
+
+#数据库操作上下文:持有连接池,以及可选的当前事务。
+sqlx-context = "0.0.3"
+
+#注解路由
+hyperoute-core = "0.0.7"
+hyperoute-macro = "0.0.7"
+hyper = { version = "1", features = ["full"] }
+http-body-util = "0.1"
+
+#接口返回的JSON数据压缩
+flate2 = "1"
+
+#表单验证
+validator = { version = "0.20", features = ["derive"] }
+
+#密码哈希
+argon2 = { version = "0.5", features = ["std"] }
+
+#调用DairoDFS的接口
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "multipart", "json", "stream"] }
+
+#发送邮件(验证码)
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder", "hostname"] }
+
+#繁体转简体(采集平台的歌名大部分是繁体)
+zhconv = "0.3"
