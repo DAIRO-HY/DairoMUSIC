@@ -16,7 +16,9 @@
             }
             if (obj.type === "radio") {//这是一个单选框
                 obj.checked = obj.value === value
-            }else{
+            } else if (obj.type === "checkbox") {//复选框(开关)只设置选中状态,不能改它的value(提交的是value,如"1")
+                obj.checked = value === "true" || value === obj.value
+            } else {
                 $obj.val(value)
             }
         })
