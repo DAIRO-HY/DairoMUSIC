@@ -4,5 +4,7 @@ pub mod config_service;
 pub mod dfs_service;
 pub mod email_service;
 pub mod music_service;
+pub mod process_service;
+pub mod software_service;
 pub mod user_service;
 pub mod video_task;

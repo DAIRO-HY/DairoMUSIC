@@ -54,43 +54,10 @@
             </div>
         </div>
         <div class="app-card">
-            <div class="app-card-title">歌曲处理</div>
-            <div class="app-form">
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label">ffmpeg路径 <span class="text-secondary small">(为空时使用系统PATH里的ffmpeg)</span></label>
-                        <input name="ffmpegPath" class="form-control" placeholder="ffmpeg" autocomplete="off">
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">ffprobe路径</label>
-                        <input name="ffprobePath" class="form-control" placeholder="ffprobe" autocomplete="off">
-                    </div>
-                </div>
-                <div class="text-secondary small mt-2">会员上传和采集的歌曲需要用ffmpeg读取歌曲信息、转码成不同音质</div>
-                <button class="btn btn-outline-primary btn-sm mt-3" type="button" onclick="onCheckFfmpegClick()">检测ffmpeg</button>
-            </div>
-            <hr class="my-4">
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" name="collectEnable" value="1" id="collectEnable">
-                <label class="form-check-label" for="collectEnable">启用歌曲采集 <span class="text-secondary small">(需要另外部署 DairoMUSIC-Search 采集服务)</span></label>
-            </div>
-            <div class="app-form mt-3">
-                <div class="mb-3">
-                    <label class="form-label">采集服务地址</label>
-                    <input name="collectUrl" class="form-control" placeholder="http://127.0.0.1:8021" autocomplete="off">
-                </div>
-                <div>
-                    <label class="form-label">采集服务对外的地址 <span class="text-secondary small">(客户端直接播放采集中的歌曲时使用,为空时和上面相同)</span></label>
-                    <input name="collectPublicUrl" class="form-control" placeholder="https://collect.example.com" autocomplete="off">
-                </div>
-            </div>
-            <div class="text-secondary small mt-2">不启用时,客户端不能从采集平台搜索歌曲,已经添加的采集任务暂停处理</div>
-        </div>
-        <div class="app-card">
             <div class="app-card-title">视频</div>
             <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" role="switch" name="videoEnable" value="1" id="videoEnable">
-                <label class="form-check-label" for="videoEnable">采集视频 <span class="text-secondary small">(需要启用歌曲采集)</span></label>
+                <label class="form-check-label" for="videoEnable">采集视频 <span class="text-secondary small">(需要在 <a href="/admin/search_config.html">采集服务配置</a> 里启用歌曲采集)</span></label>
             </div>
             <div class="text-secondary small mt-1">采集最高规格的原画,iPhone不能直接播放的编码(VP9、AV1)转码成HEVC;原画高于480p或高于25fps时再转码一个480p 25fps的流畅版。视频文件较大,转码很耗CPU,同一时间只处理一个</div>
             <div class="app-form mt-3">
@@ -110,7 +77,8 @@
                         <input name="videoThreads" class="form-control" type="number" min="0" max="64" placeholder="0:自动">
                     </div>
                 </div>
-                <div class="text-secondary small mt-2">“检测ffmpeg”可以查看自动选择的编码器;线程数为0时使用CPU核数的一半</div>
+                <div class="text-secondary small mt-2">“检测ffmpeg”可以查看自动选择的编码器;线程数为0时使用CPU核数的一半。ffmpeg在 <a href="/admin/software.html">依赖软件</a> 里安装</div>
+                <button class="btn btn-outline-primary btn-sm mt-3" type="button" onclick="onCheckFfmpegClick()">检测ffmpeg</button>
             </div>
             <hr class="my-4">
             <div class="form-check form-switch">
@@ -134,7 +102,6 @@
         $.ajaxByData("/admin/api/system_config/detail").success(data => {
             $("#form").bindValue(data)
             $("#allowRegister").prop("checked", data.allowRegister)
-            $("#collectEnable").prop("checked", data.collectEnable)
             $("#videoEnable").prop("checked", data.videoEnable)
             $("#allowSaveAlbum").prop("checked", data.allowSaveAlbum)
             $("#allowDownloadMusic").prop("checked", data.allowDownloadMusic)

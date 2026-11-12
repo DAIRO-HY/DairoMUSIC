@@ -54,3 +54,13 @@ lettre = { version = "0.11", default-features = false, features = ["tokio1-rustl
 
 #繁体转简体(采集平台的歌名大部分是繁体)
 zhconv = "0.3"
+
+#代理DFS和采集服务的文件时,把响应流转成可以跨线程共享的流
+tokio-stream = "0.1"
+
+#解压依赖软件的安装包(zip格式)
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+#停止内置服务时先发送SIGINT,让它正常退出
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

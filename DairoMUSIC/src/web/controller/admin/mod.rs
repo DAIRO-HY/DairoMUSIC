@@ -1,10 +1,14 @@
 pub mod admin;
 pub mod common;
+pub mod dfs_config;
 pub mod install;
 pub mod login;
 pub mod menu;
 pub mod music;
 pub mod music_duplicate;
 pub mod role;
+pub mod search_config;
+pub mod service_util;
+pub mod software;
 pub mod system_config;
 pub mod user;

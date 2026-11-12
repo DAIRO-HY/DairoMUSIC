@@ -12,7 +12,8 @@ DairoMUSIC是一个音乐服务端，为DairoMUSIC客户端提供曲库、歌单
 
 ### 2). 文件存储使用DairoDFS
 
-歌曲文件、封面图片都保存在[DairoDFS](https://github.com/DAIRO-HY/DairoDFS)，支持断点续传和在线播放。
+歌曲文件、封面图片都保存在[DairoDFS](https://github.com/DAIRO-HY/DairoDFS)，支持断点续传和在线播放。<br>
+可以在后台直接安装内置的DairoDFS，由DairoMUSIC运行，第一次启动时自动初始化，不需要另外部署；也可以使用自己部署的DairoDFS。
 
 ### 3). 自动处理歌曲
 
@@ -21,16 +22,15 @@ DairoMUSIC是一个音乐服务端，为DairoMUSIC客户端提供曲库、歌单
 
 ### 4). 歌曲采集（可选）
 
-可以配合DairoMusicSearch采集服务，从采集平台搜索、采集歌曲。不需要时在后台关闭即可。
+可以配合DairoMUSIC-Search采集服务，从采集平台搜索、采集歌曲。采集服务同样可以在后台安装成内置服务。不需要时在后台关闭即可。
 
 ### 5). 后台管理
 
-管理员、角色权限、导航菜单、会员、歌曲、重复歌曲去重、系统配置。
+管理员、角色权限、导航菜单、会员、歌曲、重复歌曲去重、系统配置，以及DairoDFS、采集服务和依赖软件（ffmpeg、ffprobe、yt-dlp、deno）的安装和更新。
 
 # 2. 准备
 
-1. 部署[DairoDFS](https://github.com/DAIRO-HY/DairoDFS)，在DairoDFS的"我的"页面里生成API票据，并开启文件访问路径。
-2. 安装[FFmpeg](https://ffmpeg.org/)（包括ffprobe），用于读取歌曲信息和转码。
+只需要DairoMUSIC一个程序。DairoDFS、采集服务、FFmpeg等都可以在启动之后从后台安装（上传安装包，或者填写下载地址），不需要另外配置环境。
 
 # 3. 编译和运行
 
@@ -44,7 +44,7 @@ cargo run -p DairoMUSIC
 cargo build --release -p DairoMUSIC
 
 #运行
-./target/release/DairoMUSIC --dfs-url http://127.0.0.1:8031 --dfs-token <DairoDFS的API票据>
+./target/release/DairoMUSIC
 ```
 
 # 4. 配置
@@ -54,12 +54,18 @@ cargo build --release -p DairoMUSIC
 
 ## 2). 第一次打开时，请根据页面提示创建超级管理员账号。
 
-## 3). 登录后台之后，在"系统设置 → 系统配置"里设置：
+## 3). 登录后台之后，在"系统设置"里设置：
 
-- 是否开放注册
-- 邮件服务（发送注册、重置密码的验证码）
-- FFmpeg路径（为空时使用系统PATH里的ffmpeg）
-- 歌曲采集（可选）
+- **DairoDFS配置**：
+  - 选择内置DFS（推荐）或外部DFS。
+  - 内置DFS：上传安装包或填写下载地址安装（"推荐地址"会从GitHub获取当前系统的最新版本）。端口、数据目录、存储目录、管理员账号都有默认值，不填就行。第一次启动时自动创建管理员并生成API票据。
+  - 外部DFS：填写地址和API票据（在DairoDFS的"我的"页面里生成，并开启文件访问路径）。
+- **采集服务配置**（可选）：启用歌曲采集，同样可以选择内置或外部。
+- **依赖软件**：ffmpeg、ffprobe（读取歌曲信息、转码），yt-dlp、deno（内置采集服务使用）。安装了内置程序时优先使用内置的，否则使用填写的路径或系统PATH里的程序。重新安装就是更新版本。
+- **系统配置**：是否开放注册、邮件服务（发送注册、重置密码的验证码）、视频等。
+
+客户端访问DFS和采集服务的文件，默认通过DairoMUSIC代理（`/proxy/dairo-dfs/`、`/proxy/dairo-search/`），和访问DairoMUSIC使用同一个域名，只需要开放DairoMUSIC的端口。也可以设置成直接访问。<br>
+内置服务的程序安装在`{数据目录}/bin`下，DairoMUSIC启动时一起启动，异常退出时自动重启，DairoMUSIC退出时一起停止。
 
 # 5. 启动参数
 
@@ -67,9 +73,6 @@ cargo build --release -p DairoMUSIC
 |---|---|---|---|
 | `--web-port` | `DAIRO_MUSIC_WEB_PORT` | 8020 | 程序监听端口 |
 | `--data-dir` | `DAIRO_MUSIC_DATA_DIR` | ./data | 数据保存目录，数据库和上传的临时文件都在这个目录下 |
-| `--dfs-url` | `DAIRO_MUSIC_DFS_URL` | http://127.0.0.1:8031 | DairoDFS的地址（服务端调用，同一台机器或内网时用内网地址） |
-| `--dfs-public-url` | `DAIRO_MUSIC_DFS_PUBLIC_URL` | 和`--dfs-url`相同 | DairoDFS对外的地址，客户端播放歌曲、显示图片时使用 |
-| `--dfs-token` | `DAIRO_MUSIC_DFS_TOKEN` | | DairoDFS的API票据，建议通过环境变量传入 |
 | `--mock-email` | `DAIRO_MUSIC_MOCK_EMAIL` | 不开启 | 模拟发送邮件，**只用于开发和测试**：验证码不发送邮件，只记录到日志，并且可以从本机通过`GET /api/dev/email_code?email=`获取 |
 
 # 6. 文档

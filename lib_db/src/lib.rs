@@ -12,7 +12,7 @@ use std::time::Duration;
 struct Assets;
 
 /// 数据库版本号
-const VERSION: i32 = 3;
+const VERSION: i32 = 4;
 
 /// 数据库文件名
 pub const DB_FILE_NAME: &str = "dairo-music.sqlite";
@@ -58,6 +58,19 @@ const UPGRADE_V3: &str = "
 alter table music add column videoState INTEGER NOT NULL default 0;
 alter table music add column videoTime INT8;
 CREATE INDEX idx_music_video_state ON music (videoState);
+";
+
+/// 版本3升级到版本4:系统设置下增加DairoDFS配置、采集服务配置、依赖软件三个页面,超级管理员拥有这些菜单
+const UPGRADE_V4: &str = "
+INSERT INTO admin_menu_bar (name, ico, url, parentId, orderNum)
+SELECT it.name, NULL, it.url, (SELECT id FROM admin_menu_bar WHERE name = '系统设置' AND parentId = 0), it.orderNum
+FROM (SELECT 'DairoDFS配置' AS name, '/admin/dfs_config.html' AS url, 30 AS orderNum
+      UNION ALL SELECT '采集服务配置', '/admin/search_config.html', 40
+      UNION ALL SELECT '依赖软件', '/admin/software.html', 50) it
+WHERE EXISTS (SELECT 1 FROM admin_menu_bar WHERE name = '系统设置' AND parentId = 0)
+  AND NOT EXISTS (SELECT 1 FROM admin_menu_bar m WHERE m.url = it.url);
+INSERT OR IGNORE INTO admin_permission (roleId, menuId)
+SELECT 1, id FROM admin_menu_bar WHERE url IN ('/admin/dfs_config.html', '/admin/search_config.html', '/admin/software.html');
 ";
 
 /// 全新安装时的初始数据(菜单、超级管理员角色)
@@ -162,6 +175,11 @@ async fn upgrade(with_init_data: bool) -> Result<(), Box<dyn Error>> {
             let mut tx = (&mut *conn).begin().await?;
             sqlx::raw_sql(UPGRADE_V3).execute(&mut *tx).await?;
             execute_sql_file(&mut tx, "music_video.sql").await?;
+            tx.commit().await?;
+        }
+        if version < 4 {
+            let mut tx = (&mut *conn).begin().await?;
+            sqlx::raw_sql(UPGRADE_V4).execute(&mut *tx).await?;
             tx.commit().await?;
         }
     }

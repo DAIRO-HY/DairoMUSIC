@@ -57,11 +57,67 @@ pub struct Config {
     #[serde(default = "default_true")]
     pub allow_download_video: bool,
 
-    // ffmpeg程序路径,为空时使用PATH里的ffmpeg
+    // 采集服务是否使用内置安装的DairoMUSIC-Search(随DairoMUSIC一起启动),否则使用collect_url
+    #[serde(default = "default_true")]
+    pub collect_builtin: bool,
+
+    // 客户端访问采集服务的方式 proxy(默认,空也是):通过DairoMUSIC代理 direct:直接访问collect_public_url
+    pub collect_public_mode: String,
+
+    // 内置采集服务的端口,0时使用默认端口8021
+    pub collect_port: u16,
+
+    // 内置采集服务的数据目录,为空时使用 {数据目录}/search
+    pub collect_data_dir: String,
+
+    // 内置采集服务同时下载歌曲的数量,0时为1
+    pub collect_thread_count: i64,
+
+    // 是否使用内置安装的DairoDFS(随DairoMUSIC一起启动),否则使用dfs_url
+    #[serde(default = "default_true")]
+    pub dfs_builtin: bool,
+
+    // 外部DairoDFS的接口地址,如 http://127.0.0.1:8031
+    pub dfs_url: String,
+
+    // 外部DairoDFS的API票据
+    pub dfs_token: String,
+
+    // 客户端访问DFS文件的方式 proxy(默认,空也是):通过DairoMUSIC代理 direct:直接访问dfs_public_url
+    pub dfs_public_mode: String,
+
+    // DFS对外的访问地址(direct时使用),为空时:外部DFS和dfs_url相同,内置DFS使用客户端访问DairoMUSIC的域名+DFS端口
+    pub dfs_public_url: String,
+
+    // 内置DFS的端口,0时使用默认端口8031
+    pub dfs_port: u16,
+
+    // 内置DFS的数据目录(数据库等),为空时使用 {数据目录}/dfs
+    pub dfs_data_dir: String,
+
+    // 内置DFS的文件存储目录,为空时使用 {DFS数据目录}/storage
+    pub dfs_storage_dir: String,
+
+    // 内置DFS的管理员用户名,为空时为admin
+    pub dfs_admin_name: String,
+
+    // 内置DFS的管理员密码,第一次初始化时自动生成
+    pub dfs_admin_pwd: String,
+
+    // 内置DFS自动生成的API票据
+    pub dfs_builtin_token: String,
+
+    // ffmpeg程序路径,为空时使用PATH里的ffmpeg(安装了内置的ffmpeg时优先使用内置的)
     pub ffmpeg_path: String,
 
     // ffprobe程序路径,为空时使用PATH里的ffprobe
     pub ffprobe_path: String,
+
+    // yt-dlp程序路径,为空时使用PATH里的yt-dlp(只有内置采集服务使用)
+    pub yt_dlp_path: String,
+
+    // deno程序路径,为空时使用PATH里的deno(yt-dlp解析YouTube时使用)
+    pub deno_path: String,
 
     // 服务器唯一标识,第一次启动时生成,以后不变(客户端用来区分不同服务器的缓存)
     pub server_id: String,
@@ -119,4 +175,66 @@ pub async fn save(ctx: &mut DbContext, config: &Config) -> Result<(), sqlx::Erro
 /// 保存成功后更新内存里的配置
 pub fn apply(config: Config) {
     *CONFIG.write().unwrap() = Some(config);
+}
+
+/// 修改一部分配置并保存(读取当前配置,修改后整体保存)
+pub async fn update(f: impl FnOnce(&mut Config)) -> Result<Config, sqlx::Error> {
+    //同一时间只有一个修改,避免两个修改同时读取后互相覆盖
+    static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _lock = LOCK.lock().await;
+    let mut config = get();
+    f(&mut config);
+    let mut ctx = crate::db::begin().await?;
+    save(&mut ctx, &config).await?;
+    ctx.commit().await?;
+    apply(config.clone());
+    Ok(config)
+}
+
+/// 数据目录的绝对路径(传给子进程的路径都用绝对路径)
+pub fn data_dir() -> std::path::PathBuf {
+    let dir = std::path::Path::new(&crate::application::ARGS.data_dir);
+    std::path::absolute(dir).unwrap_or_else(|_| dir.to_path_buf())
+}
+
+/// 内置DFS的端口
+pub fn dfs_port(config: &Config) -> u16 {
+    if config.dfs_port == 0 { 8031 } else { config.dfs_port }
+}
+
+/// 内置DFS的数据目录
+pub fn dfs_data_dir(config: &Config) -> std::path::PathBuf {
+    if config.dfs_data_dir.is_empty() {
+        data_dir().join("dfs")
+    } else {
+        std::path::absolute(&config.dfs_data_dir).unwrap_or_else(|_| config.dfs_data_dir.clone().into())
+    }
+}
+
+/// 内置DFS的文件存储目录
+pub fn dfs_storage_dir(config: &Config) -> std::path::PathBuf {
+    if config.dfs_storage_dir.is_empty() {
+        dfs_data_dir(config).join("storage")
+    } else {
+        std::path::absolute(&config.dfs_storage_dir).unwrap_or_else(|_| config.dfs_storage_dir.clone().into())
+    }
+}
+
+/// 内置DFS的管理员用户名
+pub fn dfs_admin_name(config: &Config) -> String {
+    if config.dfs_admin_name.is_empty() { "admin".to_string() } else { config.dfs_admin_name.clone() }
+}
+
+/// 内置采集服务的端口
+pub fn collect_port(config: &Config) -> u16 {
+    if config.collect_port == 0 { 8021 } else { config.collect_port }
+}
+
+/// 内置采集服务的数据目录
+pub fn collect_data_dir(config: &Config) -> std::path::PathBuf {
+    if config.collect_data_dir.is_empty() {
+        data_dir().join("search")
+    } else {
+        std::path::absolute(&config.collect_data_dir).unwrap_or_else(|_| config.collect_data_dir.clone().into())
+    }
 }

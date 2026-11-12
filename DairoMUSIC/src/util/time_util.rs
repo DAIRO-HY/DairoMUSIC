@@ -13,3 +13,8 @@ pub fn current_year() -> i32 {
     use chrono::Datelike;
     chrono::Local::now().year()
 }
+
+/// 当前时间的显示文本(本地时区),如 11-12 21:37:05
+pub fn now_text() -> String {
+    chrono::Local::now().format("%m-%d %H:%M:%S").to_string()
+}

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <script src="/static/js/software.js"></script>
+    <title>依赖软件</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <div class="app-card-title">说明</div>
+        <div class="small text-secondary">
+            <div>ffmpeg、ffprobe:读取歌曲信息、转码歌曲和视频,DairoMUSIC和内置采集服务都要使用</div>
+            <div>yt-dlp、deno:内置采集服务从YouTube搜索和下载时使用,yt-dlp需要保持最新版本,太旧时YouTube会拒绝访问</div>
+            <div class="mt-2">安装了内置程序时优先使用内置的;没有安装时使用填写的外部程序路径,没有填写时使用系统PATH里的程序。
+                重新安装就是更新版本,ffmpeg的安装包里有ffprobe时会一起安装</div>
+        </div>
+    </div>
+    <div class="app-card">
+        <div class="app-card-title">ffmpeg</div>
+        <div id="ffmpeg"></div>
+    </div>
+    <div class="app-card">
+        <div class="app-card-title">ffprobe</div>
+        <div id="ffprobe"></div>
+    </div>
+    <div class="app-card">
+        <div class="app-card-title">yt-dlp</div>
+        <div id="yt-dlp"></div>
+    </div>
+    <div class="app-card">
+        <div class="app-card-title">deno</div>
+        <div id="deno"></div>
+    </div>
+</main>
+<script>
+    $(function () {
+        //ffmpeg的安装包里有ffprobe时会一起安装,ffmpeg安装完成后刷新ffprobe
+        const ffprobe = new SoftwareCard("#ffprobe", "ffprobe")
+        new SoftwareCard("#ffmpeg", "ffmpeg", () => ffprobe.refresh())
+        new SoftwareCard("#yt-dlp", "yt-dlp")
+        new SoftwareCard("#deno", "deno")
+    })
+</script>
+</body>
+</html>

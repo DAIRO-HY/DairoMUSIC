@@ -443,18 +443,6 @@ pub struct SystemConfig {
     #[validate(length(max = 64, message = "长度不能超过64位"))]
     pub smtp_from_name: String,
 
-    // 是否启用歌曲采集 1:启用 0:不启用
-    #[serde(default)]
-    pub collect_enable: i64,
-
-    #[serde(default)]
-    #[validate(length(max = 256, message = "长度不能超过256位"))]
-    pub collect_url: String,
-
-    #[serde(default)]
-    #[validate(length(max = 256, message = "长度不能超过256位"))]
-    pub collect_public_url: String,
-
     // 是否采集视频 1:采集 0:不采集
     #[serde(default)]
     pub video_enable: i64,
@@ -477,12 +465,96 @@ pub struct SystemConfig {
     // 是否允许下载视频 1:允许 0:不允许
     #[serde(default)]
     pub allow_download_video: i64,
+}
 
+/// DairoDFS配置
+#[derive(Debug, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct DfsConfig {
+    // 1:使用内置的DFS 0:使用外部的DFS
+    #[serde(default)]
+    pub builtin: i64,
+
+    // 外部DFS的接口地址
+    #[serde(default)]
+    #[validate(length(max = 256, message = "长度不能超过256位"))]
+    pub url: String,
+
+    // 外部DFS的API票据,为空时不修改
+    #[serde(default)]
+    #[validate(length(max = 128, message = "长度不能超过128位"))]
+    pub token: String,
+
+    // 客户端访问方式 proxy:通过DairoMUSIC代理 direct:直接访问
+    #[serde(default)]
+    pub public_mode: String,
+
+    // 对外的访问地址(direct时使用)
+    #[serde(default)]
+    #[validate(length(max = 256, message = "长度不能超过256位"))]
+    pub public_url: String,
+
+    // 内置DFS的端口,为空时使用默认端口
+    #[serde(default)]
+    pub port: String,
+
+    // 内置DFS的数据目录
     #[serde(default)]
     #[validate(length(max = 512, message = "长度不能超过512位"))]
-    pub ffmpeg_path: String,
+    pub data_dir: String,
 
+    // 内置DFS的文件存储目录
     #[serde(default)]
     #[validate(length(max = 512, message = "长度不能超过512位"))]
-    pub ffprobe_path: String,
+    pub storage_dir: String,
+
+    // 内置DFS的管理员用户名
+    #[serde(default)]
+    #[validate(length(max = 32, message = "长度不能超过32位"))]
+    pub admin_name: String,
+
+    // 内置DFS的管理员密码,为空时不修改
+    #[serde(default)]
+    #[validate(length(max = 64, message = "长度不能超过64位"))]
+    pub admin_pwd: String,
+}
+
+/// 采集服务配置
+#[derive(Debug, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchConfig {
+    // 是否启用歌曲采集 1:启用 0:不启用
+    #[serde(default)]
+    pub enable: i64,
+
+    // 1:使用内置的采集服务 0:使用外部的采集服务
+    #[serde(default)]
+    pub builtin: i64,
+
+    // 外部采集服务的地址
+    #[serde(default)]
+    #[validate(length(max = 256, message = "长度不能超过256位"))]
+    pub url: String,
+
+    // 客户端访问方式 proxy:通过DairoMUSIC代理 direct:直接访问
+    #[serde(default)]
+    pub public_mode: String,
+
+    // 对外的访问地址(direct时使用)
+    #[serde(default)]
+    #[validate(length(max = 256, message = "长度不能超过256位"))]
+    pub public_url: String,
+
+    // 内置采集服务的端口,为空时使用默认端口
+    #[serde(default)]
+    pub port: String,
+
+    // 内置采集服务的数据目录
+    #[serde(default)]
+    #[validate(length(max = 512, message = "长度不能超过512位"))]
+    pub data_dir: String,
+
+    // 同时下载歌曲的数量,为空时为1
+    #[serde(default)]
+    pub thread_count: String,
 }

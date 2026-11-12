@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <script src="/static/js/software.js"></script>
+    <title>DairoDFS配置</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <form id="form" action="/admin/api/dfs_config/save" onsubmit="onSubmitClick();return false;">
+        <div class="app-card">
+            <div class="app-card-title">运行方式 <span class="text-secondary small fw-normal">(歌曲、图片、视频文件都保存在DairoDFS)</span></div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="builtin" value="1" id="builtin1" onchange="onModeChange()">
+                <label class="form-check-label" for="builtin1">内置DFS <span class="text-secondary small">(推荐。由DairoMUSIC安装和运行,第一次启动时自动初始化)</span></label>
+            </div>
+            <div class="form-check mt-1">
+                <input class="form-check-input" type="radio" name="builtin" value="0" id="builtin0" onchange="onModeChange()">
+                <label class="form-check-label" for="builtin0">外部DFS <span class="text-secondary small">(使用自己部署的DairoDFS)</span></label>
+            </div>
+        </div>
+
+        <div class="app-card" data-mode="builtin">
+            <div class="app-card-title">安装</div>
+            <div id="software"></div>
+            <div class="text-secondary small mt-2">
+                安装包在 <a href="https://github.com/DAIRO-HY/DairoDFS/releases" target="_blank">GitHub Releases</a> 下载,选择当前系统的版本;
+                “推荐地址”会自动获取最新版本。重新安装就是更新版本,DFS里的数据不受影响
+            </div>
+        </div>
+
+        <div class="app-card" data-mode="builtin">
+            <div class="app-card-title">内置DFS设置 <span class="text-secondary small fw-normal">(不填时使用默认值,修改后自动重启DFS)</span></div>
+            <div class="app-form">
+                <div class="row g-3">
+                    <div class="col-4">
+                        <label class="form-label">端口</label>
+                        <input name="port" class="form-control" type="number" min="1" max="65535" id="port">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">数据目录 <span class="text-secondary small">(DFS的数据库等)</span></label>
+                        <input name="dataDir" class="form-control" id="dataDir" autocomplete="off">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">文件存储目录 <span class="text-secondary small">(只在第一次初始化时使用,之后在DFS的网页里修改)</span></label>
+                        <input name="storageDir" class="form-control" id="storageDir" autocomplete="off">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">管理员用户名</label>
+                        <input name="adminName" class="form-control" placeholder="admin" autocomplete="off">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">管理员密码</label>
+                        <input name="adminPwd" class="form-control" type="password" id="adminPwd" autocomplete="new-password">
+                    </div>
+                </div>
+                <div class="text-secondary small mt-2">
+                    DFS第一次启动时,用这个账号创建管理员,DairoMUSIC用它保存文件;密码不填时自动生成。
+                    如果DFS已经初始化过,请填写DFS里已有的管理员账号
+                </div>
+                <div class="mt-3 d-flex flex-wrap gap-2 align-items-center">
+                    <span id="initState"></span>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="onShowPwdClick()">查看管理员密码</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="onReinitClick()">重新获取API票据</button>
+                    <span class="small text-secondary" id="pwdText"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="app-card" data-mode="external">
+            <div class="app-card-title">外部DFS</div>
+            <div class="app-form">
+                <div class="mb-3">
+                    <label class="form-label">DFS地址 <span class="text-secondary small">(DairoMUSIC调用DFS的接口,同一台机器或内网时用内网地址)</span></label>
+                    <input name="url" class="form-control" placeholder="http://127.0.0.1:8031" autocomplete="off">
+                </div>
+                <div>
+                    <label class="form-label">API票据 <span class="text-secondary small">(在DFS的“我的”页面里生成)</span></label>
+                    <input name="token" class="form-control" type="password" id="token" autocomplete="new-password">
+                </div>
+                <div class="text-secondary small mt-2">DFS账号需要在“我的”页面里开启公开访问路径;建议在DFS的用户管理里把这个账号设置为不处理上传的文件</div>
+            </div>
+        </div>
+
+        <div class="app-card">
+            <div class="app-card-title">客户端访问方式 <span class="text-secondary small fw-normal">(APP播放歌曲、显示图片时访问的地址)</span></div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="publicMode" value="proxy" id="publicModeProxy" onchange="onModeChange()">
+                <label class="form-check-label" for="publicModeProxy">通过DairoMUSIC代理 <span class="text-secondary small">(推荐。和访问DairoMUSIC使用同一个域名,不需要再开放DFS的端口)</span></label>
+            </div>
+            <div class="form-check mt-1">
+                <input class="form-check-input" type="radio" name="publicMode" value="direct" id="publicModeDirect" onchange="onModeChange()">
+                <label class="form-check-label" for="publicModeDirect">直接访问DFS</label>
+            </div>
+            <div class="text-secondary small mt-2" data-public="proxy">文件地址如: <code id="proxyExample"></code></div>
+            <div class="app-form mt-3" data-public="direct">
+                <label class="form-label">DFS对外的地址</label>
+                <input name="publicUrl" class="form-control" id="publicUrl" autocomplete="off">
+                <div class="text-secondary small mt-1" id="publicUrlTip"></div>
+            </div>
+        </div>
+
+        <div class="mt-3 d-flex gap-2">
+            <button type="submit" class="btn btn-primary px-4">保存</button>
+            <button type="button" class="btn btn-outline-primary" onclick="onTestClick()">测试连接</button>
+        </div>
+    </form>
+</main>
+<script>
+    let detail = {}
+
+    $(function () {
+        new SoftwareCard("#software", "dfs", () => load(false))
+        $("#proxyExample").text(location.origin + "/proxy/dairo-dfs/d/...")
+        load(true)
+    })
+
+    /**
+     * 加载配置
+     * @param bindForm 是否填充表单(安装状态变化时只刷新初始化状态)
+     */
+    function load(bindForm) {
+        $.ajaxByData("/admin/api/dfs_config/detail").hide().success(data => {
+            detail = data
+            if (bindForm) {
+                $("#form").bindValue(data)
+                $(`input[name=builtin][value=${data.builtin ? 1 : 0}]`).prop("checked", true)
+                $("#port").attr("placeholder", data.defaultPort)
+                $("#dataDir").attr("placeholder", data.defaultDataDir)
+                $("#storageDir").attr("placeholder", data.defaultStorageDir)
+                $("#adminPwd").attr("placeholder", data.hasAdminPwd ? "不修改请留空" : "不填时自动生成")
+                $("#token").attr("placeholder", data.hasToken ? "不修改请留空" : "")
+                onModeChange()
+            }
+            $("#initState").html(data.hasBuiltinToken
+                ? `<span class="badge text-bg-success">已初始化</span>`
+                : `<span class="badge text-bg-secondary">未初始化</span>`)
+        }).get()
+    }
+
+    function onModeChange() {
+        const builtin = $("input[name=builtin]:checked").val() === "1"
+        $("[data-mode=builtin]").toggle(builtin)
+        $("[data-mode=external]").toggle(!builtin)
+        const mode = $("input[name=publicMode]:checked").val()
+        $("[data-public=proxy]").toggle(mode !== "direct")
+        $("[data-public=direct]").toggle(mode === "direct")
+        const port = $("#port").val() || detail.defaultPort
+        $("#publicUrl").attr("placeholder", builtin ? `${location.protocol}//${location.hostname}:${port}` : "如 https://dfs.example.com")
+        $("#publicUrlTip").text(builtin
+            ? "为空时使用访问DairoMUSIC的主机名加上DFS的端口,需要开放DFS的端口"
+            : "为空时和DFS地址相同")
+    }
+
+    function onSubmitClick() {
+        $("#form").ajaxByForm().success(() => {
+            $("#adminPwd, #token").val("")
+            load(true)
+            alert("已保存")
+        }).post()
+    }
+
+    function onTestClick() {
+        $.ajaxByData("/admin/api/dfs_config/test").success(text => alert(text)).post()
+    }
+
+    function onShowPwdClick() {
+        $.ajaxByData("/admin/api/dfs_config/admin_pwd").success(pwd => {
+            $("#pwdText").text(`用户名: ${$("input[name=adminName]").val() || "admin"} 密码: ${pwd}`)
+        }).post()
+    }
+
+    function onReinitClick() {
+        if (!confirm("重新登录DFS并检查API票据,确定吗?")) {
+            return
+        }
+        $.ajaxByData("/admin/api/dfs_config/reinit").success(() => {
+            setTimeout(() => load(false), 3000)
+        }).post()
+    }
+</script>
+</body>
+</html>

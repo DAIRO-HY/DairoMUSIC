@@ -1,7 +1,7 @@
 //! 调用ffmpeg/ffprobe处理歌曲文件
 //! 直接执行程序并逐个传参,不经过shell,文件名里有特殊字符也没有问题
 
-use crate::service::config_service;
+use crate::service::software_service;
 use serde_json::Value;
 use std::path::Path;
 use std::process::Stdio;
@@ -39,16 +39,14 @@ pub struct AudioInfo {
     pub has_cover: bool,
 }
 
-/// ffmpeg程序
+/// ffmpeg程序(安装了内置的ffmpeg时使用内置的)
 pub(crate) fn ffmpeg() -> String {
-    let path = config_service::get().ffmpeg_path;
-    if path.is_empty() { "ffmpeg".to_string() } else { path }
+    software_service::program(&software_service::FFMPEG)
 }
 
 /// ffprobe程序
 pub(crate) fn ffprobe() -> String {
-    let path = config_service::get().ffprobe_path;
-    if path.is_empty() { "ffprobe".to_string() } else { path }
+    software_service::program(&software_service::FFPROBE)
 }
 
 /// 执行命令,返回标准输出;失败时返回标准错误的内容

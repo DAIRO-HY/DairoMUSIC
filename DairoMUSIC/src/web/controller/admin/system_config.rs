@@ -4,15 +4,18 @@ use crate::service::config_service::{self, Config};
 use crate::service::email_service;
 use crate::web::biz_error::BizError;
 use crate::web::form;
-use crate::{biz_error, db};
+use crate::biz_error;
 use hyperoute_macro::{GET, POST};
 use validator::Validate;
 
-/// 获取系统配置(不返回SMTP密码)
+/// 获取系统配置(不返回密码和票据)
 #[GET("/admin/api/system_config/detail")]
 pub async fn detail() -> Config {
     let mut config = config_service::get();
     config.smtp_pwd = String::new();
+    config.dfs_token = String::new();
+    config.dfs_admin_pwd = String::new();
+    config.dfs_builtin_token = String::new();
     config
 }
 
@@ -22,46 +25,30 @@ pub async fn save(form: form::SystemConfig) -> Result<(), BizError> {
     if let Err(e) = form.validate() {
         return Err(BizError::fields(e));
     }
-    let collect_url = form.collect_url.trim().to_string();
-    let collect_public_url = form.collect_public_url.trim().to_string();
-    if form.collect_enable == 1 && collect_url.is_empty() {
-        return Err(BizError::field("collectUrl", "启用采集时必须设置采集服务的地址"));
-    }
-    for (field, url) in [("collectUrl", &collect_url), ("collectPublicUrl", &collect_public_url)] {
-        if !url.is_empty() && !url.starts_with("http://") && !url.starts_with("https://") {
-            return Err(BizError::field(field, "地址必须以http://或https://开头"));
-        }
-    }
     if !["", "software", "videotoolbox", "nvenc", "qsv"].contains(&form.video_encoder.as_str()) {
         return Err(BizError::field("videoEncoder", "视频编码器不正确"));
     }
-    let current = config_service::get();
-    let config = Config {
-        allow_register: form.allow_register == 1,
-        smtp_host: form.smtp_host.trim().to_string(),
-        smtp_port: form.smtp_port,
-        smtp_user: form.smtp_user.trim().to_string(),
+
+    //采集服务、DFS、ffmpeg等在各自的页面设置,这里只修改本页面的配置
+    config_service::update(|it| {
+        it.allow_register = form.allow_register == 1;
+        it.smtp_host = form.smtp_host.trim().to_string();
+        it.smtp_port = form.smtp_port;
+        it.smtp_user = form.smtp_user.trim().to_string();
 
         //密码为空表示不修改
-        smtp_pwd: if form.smtp_pwd.is_empty() { current.smtp_pwd } else { form.smtp_pwd },
-        smtp_from_name: form.smtp_from_name.trim().to_string(),
-        collect_enable: form.collect_enable == 1,
-        collect_url,
-        collect_public_url,
-        video_enable: form.video_enable == 1,
-        video_encoder: form.video_encoder,
-        video_threads: form.video_threads,
-        allow_save_album: form.allow_save_album == 1,
-        allow_download_music: form.allow_download_music == 1,
-        allow_download_video: form.allow_download_video == 1,
-        ffmpeg_path: form.ffmpeg_path.trim().to_string(),
-        ffprobe_path: form.ffprobe_path.trim().to_string(),
-        server_id: current.server_id.clone(),
-    };
-    let mut ctx = db::begin().await?;
-    config_service::save(&mut ctx, &config).await?;
-    ctx.commit().await?;
-    config_service::apply(config);
+        if !form.smtp_pwd.is_empty() {
+            it.smtp_pwd = form.smtp_pwd;
+        }
+        it.smtp_from_name = form.smtp_from_name.trim().to_string();
+        it.video_enable = form.video_enable == 1;
+        it.video_encoder = form.video_encoder;
+        it.video_threads = form.video_threads;
+        it.allow_save_album = form.allow_save_album == 1;
+        it.allow_download_music = form.allow_download_music == 1;
+        it.allow_download_video = form.allow_download_video == 1;
+    })
+    .await?;
 
     //可能启用了采集,有等待处理的任务时开始处理
     crate::service::collect_task::wake();

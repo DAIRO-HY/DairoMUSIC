@@ -16,7 +16,10 @@ INSERT INTO admin_menu_bar (id, name, ico, url, parentId, orderNum) VALUES
 (9, '重复歌曲', NULL, '/admin/music_duplicate_list.html', 7, 20),
 (10, '系统设置', 'gear-fill', NULL, 0, 999),
 (11, '导航菜单', NULL, '/admin/admin_menu_list.html', 10, 10),
-(12, '系统配置', NULL, '/admin/system_config.html', 10, 20);
+(12, '系统配置', NULL, '/admin/system_config.html', 10, 20),
+(13, 'DairoDFS配置', NULL, '/admin/dfs_config.html', 10, 30),
+(14, '采集服务配置', NULL, '/admin/search_config.html', 10, 40),
+(15, '依赖软件', NULL, '/admin/software.html', 10, 50);
 
 -- 超级管理员拥有所有菜单
 INSERT INTO admin_permission (roleId, menuId) SELECT 1, id FROM admin_menu_bar;

@@ -167,7 +167,7 @@ static ENCODERS: Mutex<Option<(String, Encoders)>> = Mutex::new(None);
 /// 自动选择时依次尝试 VideoToolbox、NVENC、QSV,用一个很短的视频实际编码一次,能成功才使用,都不行时使用软件编码
 pub async fn encoders() -> Encoders {
     let config = config_service::get();
-    let key = format!("{}|{}", config.ffmpeg_path, config.video_encoder);
+    let key = format!("{}|{}", super::ffmpeg_util::ffmpeg(), config.video_encoder);
     if let Some((cached_key, it)) = ENCODERS.lock().unwrap().as_ref()
         && *cached_key == key
     {

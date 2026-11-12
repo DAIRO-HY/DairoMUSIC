@@ -20,7 +20,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     service::config_service::init().await;
     web::server::ready();
 
-    //获取DairoDFS的公开链接前缀
+    //启动内置的DairoDFS和采集服务,获取DairoDFS的公开访问路径
+    service::process_service::init();
     service::dfs_service::init();
 
     //后台处理采集任务和会员上传的歌曲
@@ -30,19 +31,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //定时清理过期的登录记录
     web::filter::auth::start_clean_task();
 
-    //收到Ctrl+C时退出
+    //收到Ctrl+C或SIGTERM(如systemctl stop)时退出
     tokio::spawn(async {
-        if tokio::signal::ctrl_c().await.is_ok() {
-            application::SHUTDOWN_NOTIFY.notify_waiters();
-        }
+        wait_exit_signal().await;
+        application::SHUTDOWN_NOTIFY.notify_waiters();
     });
 
     //等待程序退出
     application::SHUTDOWN_NOTIFY.notified().await;
     println!("-->即将退出");
 
+    //停止内置的DairoDFS和采集服务
+    service::process_service::stop_all().await;
+
     // 等待一段时间再退出确保监听端口都已经关闭
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     println!("-->程序已退出");
     Ok(())
+}
+
+/// 等待退出信号
+async fn wait_exit_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let Ok(mut term) = signal(SignalKind::terminate()) else {
+            let _ = tokio::signal::ctrl_c().await;
+            return;
+        };
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = term.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = tokio::signal::ctrl_c().await;
 }

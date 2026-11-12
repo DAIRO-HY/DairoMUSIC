@@ -422,6 +422,7 @@ async fn save_cover(source: &Path, info: &AudioInfo, current_logo: Option<&str>)
         None => {
             //下载采集平台的封面
             let url = current_logo.filter(|it| it.starts_with("http://") || it.starts_with("https://"))?;
+            let url = collect_service::to_internal_url(url);
             let res = CLIENT.get(url).timeout(Duration::from_secs(20)).send().await.ok()?;
             if !res.status().is_success() {
                 return None;
