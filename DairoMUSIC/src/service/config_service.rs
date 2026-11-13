@@ -28,7 +28,7 @@ pub struct Config {
     // 发件人名称
     pub smtp_from_name: String,
 
-    // 是否启用歌曲采集(DairoMusicSearch)
+    // 是否启用歌曲采集(DairoMUSIC-Search)
     pub collect_enable: bool,
 
     // 采集服务的地址,如 http://127.0.0.1:8021

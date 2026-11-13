@@ -621,13 +621,13 @@ pub async fn recommend(sw: &'static Software) -> Result<Recommend, String> {
             let platform = match (os, arch) {
                 ("linux", "x86_64") => "linux-amd64",
                 ("linux", "aarch64") => "linux-arm64",
-                ("linux", "arm") => "linux-arm",
                 ("macos", "aarch64") => "mac-arm64",
                 ("macos", "x86_64") => "mac-amd64",
                 ("windows", "x86_64") => "win-amd64.exe",
+                ("windows", "aarch64") => "win-arm64.exe",
                 _ => return Err(unsupported()),
             };
-            github_latest("DAIRO-HY/DairoMusicSearch", |name| name == format!("dairo-music-search-{}", platform)).await
+            github_latest("DAIRO-HY/DairoMUSIC-Search", |name| name == format!("dairo-music-search-{}", platform)).await
         }
         "ffmpeg" | "ffprobe" => {
             let platform = match (os, arch) {

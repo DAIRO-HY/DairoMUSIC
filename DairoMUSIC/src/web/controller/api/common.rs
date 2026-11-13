@@ -1,7 +1,7 @@
 //! 客户端:不需要登录的公共接口
 
 use crate::dao::app_version_dao;
-use crate::service::config_service;
+use crate::service::{collect_service, config_service};
 use crate::web::biz_error::BizError;
 use hyperoute_macro::GET;
 use serde::Serialize;
@@ -27,6 +27,9 @@ pub struct PublicConfig {
 
     // 是否允许下载视频(为false时客户端隐藏视频的下载按钮)
     pub allow_download_video: bool,
+
+    // 是否开启了视频采集(为false时还没有转码好的视频不会再处理,客户端不用轮询)
+    pub video_enable: bool,
 }
 
 /// 新版本信息
@@ -56,6 +59,7 @@ pub async fn config() -> PublicConfig {
         allow_save_album: config_service::get().allow_save_album,
         allow_download_music: config_service::get().allow_download_music,
         allow_download_video: config_service::get().allow_download_video,
+        video_enable: collect_service::is_video_enabled(),
     }
 }
 
