@@ -508,3 +508,79 @@ body {
     word-break: break-all;
     margin-bottom: 0;
 }
+
+/* 歌曲列表底部的播放控制器 */
+.music-player {
+    position: fixed;
+    left: var(--sidebar-width);
+    right: 0;
+    bottom: 0;
+    z-index: 1030;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 24px;
+    background: var(--card-bg);
+    border-top: 1px solid #e5e7eb;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, .06);
+}
+
+.music-player-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 260px;
+    min-width: 0;
+    flex-shrink: 0;
+}
+
+.music-player-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.music-player-progress .form-range {
+    flex: 1;
+    min-width: 0;
+}
+
+.music-play-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* 播放控制器显示时,页面底部留出空间,避免挡住分页 */
+body.music-player-open .app-main {
+    padding-bottom: 96px;
+}
+
+@media (max-width: 991.98px) {
+    .music-player {
+        left: 0;
+        flex-wrap: wrap;
+        padding: 8px 16px;
+        gap: 8px;
+    }
+
+    .music-player-info {
+        width: auto;
+        flex: 1;
+    }
+
+    .music-player-progress {
+        order: 10;
+        flex-basis: 100%;
+    }
+
+    body.music-player-open .app-main {
+        padding-bottom: 130px;
+    }
+}

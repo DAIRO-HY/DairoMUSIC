@@ -40,7 +40,7 @@
 
     function render() {
         let html = `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr>
-                        <th>保留</th><th>合并</th><th></th><th>ID</th><th>歌名</th><th>歌手</th><th>专辑</th><th>时长</th><th>音质</th><th>大小</th><th>格式</th><th>播放</th><th>状态</th>
+                        <th>保留</th><th>合并</th><th></th><th>ID</th><th>歌名</th><th>歌手</th><th>专辑</th><th>时长</th><th>音质</th><th>大小</th><th>格式</th><th>播放</th><th>状态</th><th>审核</th>
                     </tr></thead><tbody>`
         list.forEach((it, i) => {
             html += `<tr>
@@ -57,10 +57,11 @@
                 <td>${escapeHtml(it.format || "")}</td>
                 <td>${it.playCount}</td>
                 <td>${musicStateBadge(it.state)}</td>
+                <td>${auditStateBadge(it.auditState)}</td>
             </tr>`
         })
         if (list.length === 0) {
-            html += `<tr><td colspan="13" class="text-center text-secondary py-5">已经没有重复的歌曲了</td></tr>`
+            html += `<tr><td colspan="14" class="text-center text-secondary py-5">已经没有重复的歌曲了</td></tr>`
         }
         html += `</tbody></table></div>`
         $("#table").html(html)

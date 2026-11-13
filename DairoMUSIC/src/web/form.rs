@@ -175,8 +175,22 @@ pub struct MusicEdit {
     #[validate(length(max = 128, message = "专辑长度不能超过128位"))]
     pub album: String,
 
-    // 状态
+    // 采集状态 0:采集中 1:采集失败 100:采集完成
     pub state: i64,
+
+    // 审核状态 0:待审核 1:通过 2:拒绝
+    pub audit_state: i64,
+}
+
+/// 批量审核歌曲
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicAudit {
+    // 歌曲ID,逗号分隔
+    pub ids: String,
+
+    // 审核状态 0:待审核 1:通过 2:拒绝
+    pub audit_state: i64,
 }
 
 /// 重复歌曲去重

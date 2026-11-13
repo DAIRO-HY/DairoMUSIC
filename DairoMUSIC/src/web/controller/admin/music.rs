@@ -46,15 +46,17 @@ pub async fn list(
     artist: Option<String>,
     album: Option<String>,
     state: Option<i64>,
+    audit_state: Option<i64>,
     delete_flag: Option<i64>,
 ) -> Result<PageData<MusicItem>, BizError> {
-    let page_in = page.to_page_in(&["id", "name", "artist", "album", "duration", "playCount", "date", "state", "maxBitRate"], "id", "desc");
+    let page_in = page.to_page_in(&["id", "name", "artist", "album", "duration", "playCount", "date", "state", "auditState", "maxBitRate"], "id", "desc");
     let param = music_dao::PageListParam {
         id,
         name: non_empty(name),
         artist: non_empty(artist),
         album: non_empty(album),
         state,
+        audit_state,
         delete_flag,
     };
     let mut ctx = lib_db::get_context();
@@ -186,8 +188,11 @@ pub async fn edit(form: form::MusicEdit) -> Result<(), BizError> {
     if let Err(e) = form.validate() {
         return Err(BizError::fields(e));
     }
-    if ![0, 1, 2, 3, 100].contains(&form.state) {
-        return Err(BizError::field("state", "状态不正确"));
+    if ![0, 1, 100].contains(&form.state) {
+        return Err(BizError::field("state", "采集状态不正确"));
+    }
+    if !AUDIT_STATES.contains(&form.audit_state) {
+        return Err(BizError::field("auditState", "审核状态不正确"));
     }
     let mut ctx = db::begin().await?;
     if music_dao::select_one(&mut ctx, form.id).await.is_err() {
@@ -199,9 +204,41 @@ pub async fn edit(form: form::MusicEdit) -> Result<(), BizError> {
         artist: non_empty(Some(form.artist)),
         album: non_empty(Some(form.album)),
         state: form.state,
+        audit_state: form.audit_state,
     };
     music_dao::update_by_admin(&mut ctx, param).await?;
     ctx.commit().await?;
+    Ok(())
+}
+
+/// 审核状态 0:待审核 1:通过 2:拒绝(APP搜索不显示)
+const AUDIT_STATES: [i64; 3] = [0, 1, 2];
+
+/// 批量审核
+#[POST("/admin/api/music/audit")]
+pub async fn audit(form: form::MusicAudit) -> Result<(), BizError> {
+    if !AUDIT_STATES.contains(&form.audit_state) {
+        return Err(biz_error!("审核状态不正确"));
+    }
+    let mut ids = Vec::new();
+    for it in form.ids.split(',').map(str::trim).filter(|it| !it.is_empty()) {
+        let Ok(id) = it.parse::<i64>() else {
+            return Err(biz_error!("歌曲ID格式错误"));
+        };
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+
+    //没有ID时会修改所有歌曲,必须检查
+    if ids.is_empty() {
+        return Err(biz_error!("请选择要审核的歌曲"));
+    }
+    if ids.len() > 1000 {
+        return Err(biz_error!("一次最多审核1000首歌曲"));
+    }
+    let mut ctx = lib_db::get_context();
+    music_dao::set_audit_state(&mut ctx, ids, form.audit_state).await?;
     Ok(())
 }
 

@@ -12,7 +12,7 @@ use std::time::Duration;
 struct Assets;
 
 /// 数据库版本号
-const VERSION: i32 = 4;
+const VERSION: i32 = 5;
 
 /// 数据库文件名
 pub const DB_FILE_NAME: &str = "dairo-music.sqlite";
@@ -71,6 +71,15 @@ WHERE EXISTS (SELECT 1 FROM admin_menu_bar WHERE name = '系统设置' AND paren
   AND NOT EXISTS (SELECT 1 FROM admin_menu_bar m WHERE m.url = it.url);
 INSERT OR IGNORE INTO admin_permission (roleId, menuId)
 SELECT 1, id FROM admin_menu_bar WHERE url IN ('/admin/dfs_config.html', '/admin/search_config.html', '/admin/software.html');
+";
+
+/// 版本4升级到版本5:审核状态从state字段分出来,新增auditState(0:待审核 1:通过 2:拒绝),state只记录采集状态(0:采集中 1:采集失败 100:采集完成)
+/// 原来的state 2:审核中 3:审核失败 100:正常
+const UPGRADE_V5: &str = "
+alter table music add column auditState INTEGER NOT NULL default 0;
+update music set auditState = case state when 100 then 1 when 3 then 2 else 0 end;
+update music set state = 100 where state in (2, 3);
+CREATE INDEX idx_music_audit_state ON music (auditState);
 ";
 
 /// 全新安装时的初始数据(菜单、超级管理员角色)
@@ -180,6 +189,11 @@ async fn upgrade(with_init_data: bool) -> Result<(), Box<dyn Error>> {
         if version < 4 {
             let mut tx = (&mut *conn).begin().await?;
             sqlx::raw_sql(UPGRADE_V4).execute(&mut *tx).await?;
+            tx.commit().await?;
+        }
+        if version < 5 {
+            let mut tx = (&mut *conn).begin().await?;
+            sqlx::raw_sql(UPGRADE_V5).execute(&mut *tx).await?;
             tx.commit().await?;
         }
     }

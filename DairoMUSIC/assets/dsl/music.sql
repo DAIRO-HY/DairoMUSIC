@@ -6,6 +6,7 @@
 -- @param artist:String? 歌手(模糊匹配)
 -- @param album:String? 专辑(模糊匹配)
 -- @param state:i64?
+-- @param audit_state:i64?
 -- @param delete_flag:i64?
 -- @return Music
 select * from music where 1 = 1
@@ -24,6 +25,9 @@ and album like '%' || :album || '%'
 -- @if state != null
 and state = :state
 -- @end
+-- @if audit_state != null
+and auditState = :audit_state
+-- @end
 -- @if delete_flag != null
 and deleteFlag = :delete_flag
 -- @end
@@ -37,7 +41,19 @@ and deleteFlag = :delete_flag
 -- @param artist:String?
 -- @param album:String?
 -- @param state:i64
-update music set name = :name, artist = :artist, album = :album, state = :state where id = :id;
+-- @param audit_state:i64
+update music set name = :name, artist = :artist, album = :album, state = :state, auditState = :audit_state where id = :id;
+
+-- ------------------------------
+
+-- 批量修改审核状态
+-- @name set_audit_state
+-- @param ids:List<i64>
+-- @param audit_state:i64
+update music set auditState = :audit_state where 1 = 1
+-- @each ids seq="," open="and id in (" close=")" item="id"
+:id
+-- @end
 
 -- ------------------------------
 
@@ -98,7 +114,7 @@ group by name having count(*) > 1
 -- @param artist:String?
 -- @param ignore_artist:i64 1:忽略歌手
 -- @return List<SelectSameTemp>
-select m.id, m.name, m.artist, m.album, m.logo, m.duration, m.state, m.maxBitRate, m.playCount,
+select m.id, m.name, m.artist, m.album, m.logo, m.duration, m.state, m.auditState, m.maxBitRate, m.playCount,
        (select f.size from music_file f where f.musicId = m.id order by f.bitRate desc limit 1) as size,
        (select f.format from music_file f where f.musicId = m.id order by f.bitRate desc limit 1) as format
 from music m
@@ -119,30 +135,30 @@ where m.id = :id and m.deleteFlag = 0;
 
 -- ------------------------------
 
--- 搜索歌曲(歌名或歌手包含任意一个关键词)
+-- 搜索歌曲(歌名或歌手包含任意一个关键词):只搜索采集完成并且没有被拒绝的歌曲,审核通过的排在前面
 -- @name search
 -- @param keys:List<String>
 -- @param is_test:i64 1:只搜索测试歌曲
 -- @return List<Music>
-select * from music where deleteFlag = 0 and state in (2, 100) and (:is_test = 0 or testFlag = 1)
+select * from music where deleteFlag = 0 and state = 100 and auditState != 2 and (:is_test = 0 or testFlag = 1)
 -- @each keys seq=" or " open="and (" close=")" item="key"
 name like '%' || :key || '%' or artist like '%' || :key || '%'
 -- @end
-order by state desc limit 2000
+order by auditState desc limit 2000
 
 -- ------------------------------
 
--- 纠错:更新歌名、歌手、专辑,并标记为审核通过
+-- 纠错:更新歌名、歌手、专辑(不改变审核状态)
 -- @name correct
 -- @param id:i64
 -- @param name:String?
 -- @param artist:String?
 -- @param album:String?
-update music set name = :name, artist = :artist, album = :album, state = 100 where id = :id;
+update music set name = :name, artist = :artist, album = :album where id = :id;
 
 -- ------------------------------
 
--- 采集完成,更新歌曲信息,状态改为审核中
+-- 采集完成,更新歌曲信息,采集状态改为完成(审核状态不变,新歌曲是待审核)
 -- @name update_collected
 -- @param id:i64
 -- @param name:String?
@@ -153,7 +169,7 @@ update music set name = :name, artist = :artist, album = :album, state = 100 whe
 -- @param year:i64?
 -- @param max_bit_rate:i64
 update music set name = :name, artist = :artist, album = :album, logo = :logo, duration = :duration,
-                 year = :year, maxBitRate = :max_bit_rate, state = 2
+                 year = :year, maxBitRate = :max_bit_rate, state = 100
 where id = :id;
 
 -- ------------------------------

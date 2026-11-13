@@ -34,8 +34,13 @@
                         <label class="form-label">专辑</label>
                         <input name="album" class="form-control" autocomplete="off" style="max-width: 320px">
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">审核状态</label>
+                        <select name="auditState" class="form-select" style="max-width: 200px"></select>
+                        <div class="form-text">被拒绝的歌曲APP搜索不显示,已经加入歌单、收藏的仍可以播放</div>
+                    </div>
                     <div class="mb-4">
-                        <label class="form-label">状态</label>
+                        <label class="form-label">采集状态</label>
                         <select name="state" class="form-select" style="max-width: 200px"></select>
                     </div>
                     <button type="submit" class="btn btn-primary px-4">保存</button>
@@ -68,6 +73,7 @@
 
     $(function () {
         fillOptions("select[name='state']", MUSIC_STATES)
+        fillOptions("select[name='auditState']", AUDIT_STATES)
         $.ajaxByData("/admin/api/music/detail").add("id", id).success(data => {
             $("#form").bindValue(data)
             $("#logo").html(logoHtml(data.logoUrl, 180))

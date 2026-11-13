@@ -14,35 +14,65 @@
             <input name="artist" class="form-control" placeholder="歌手" style="width: 140px">
             <input name="album" class="form-control" placeholder="专辑" style="width: 140px">
             <select name="state" class="form-select" style="width: 130px"></select>
+            <select name="auditState" class="form-select" style="width: 130px"></select>
             <select name="deleteFlag" class="form-select" style="width: 120px">
                 <option value="">全部</option>
                 <option value="0" selected>未删除</option>
                 <option value="1">已删除</option>
             </select>
-            <button class="btn btn-outline-primary" type="submit"><i class="bi bi-search me-1"></i>查询</button>
         </form>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <span class="text-secondary small">勾选的歌曲:</span>
+            <button type="button" class="btn btn-outline-success btn-sm" onclick="onAuditClick(1)"><i class="bi bi-check-lg me-1"></i>审核通过</button>
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="onAuditClick(2)"><i class="bi bi-x-lg me-1"></i>拒绝</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="onAuditClick(0)"><i class="bi bi-arrow-counterclockwise me-1"></i>改为待审核</button>
+            <span class="text-secondary small">被拒绝的歌曲APP搜索不显示</span>
+        </div>
         <div id="table"></div>
     </div>
 </main>
+<!-- 底部播放控制器:同时只播放一首歌,播放标准音质(不超过128k) -->
+<div id="player" class="music-player d-none">
+    <div class="music-player-info">
+        <span id="playerLogo"></span>
+        <div style="min-width: 0">
+            <div id="playerName" class="text-truncate fw-medium"></div>
+            <div class="small text-secondary text-truncate"><span id="playerArtist"></span> <span id="playerQuality"></span></div>
+        </div>
+    </div>
+    <button id="playerToggle" type="button" class="btn btn-primary music-play-btn" title="播放/暂停"><i class="bi bi-play-fill"></i></button>
+    <div class="music-player-progress">
+        <span id="playerCurrent">0:00</span>
+        <input id="playerSeek" type="range" class="form-range" min="0" max="0" step="0.1" value="0">
+        <span id="playerDuration">0:00</span>
+    </div>
+    <span id="playerAudit"></span>
+    <button type="button" class="btn btn-outline-success btn-sm text-nowrap" onclick="auditPlaying(1)" title="审核通过"><i class="bi bi-check-lg"></i><span class="d-none d-xl-inline ms-1">通过</span></button>
+    <button type="button" class="btn btn-outline-danger btn-sm text-nowrap" onclick="auditPlaying(2)" title="拒绝"><i class="bi bi-x-lg"></i><span class="d-none d-xl-inline ms-1">拒绝</span></button>
+    <button type="button" class="btn btn-link text-secondary px-1" onclick="closePlayer()" title="关闭"><i class="bi bi-x-lg"></i></button>
+    <audio id="audio" preload="none"></audio>
+</div>
 <script>
     const table = new PageTable({
         el: "#table",
         url: "/admin/api/music/list",
         search: "#search",
+        selectable: true,
         columns: [
             {title: "", render: it => logoHtml(it.logoUrl)},
+            {title: "试听", render: it => playButtonHtml(it)},
             {title: "ID", data: "id", sortKey: "id"},
-            {title: "歌名", render: it => `<div class="d-flex align-items-center gap-1">${ellipsis(it.name, 360)}${it.deleteFlag === 1 ? badge("已删除", "danger") : ""}</div>`, sortKey: "name"},
+            {title: "歌名", render: it => `<div class="d-flex align-items-center gap-1"><a href="/admin/music_edit.html?id=${it.id}" class="text-decoration-none">${ellipsis(it.name || "(没有歌名)", 360)}</a>${it.deleteFlag === 1 ? badge("已删除", "danger") : ""}</div>`, sortKey: "name"},
             {title: "歌手", render: it => it.artist ? ellipsis(it.artist, 140) : `<span class="text-secondary">未知</span>`, sortKey: "artist"},
             {title: "专辑", render: it => it.album ? ellipsis(it.album, 140) : `<span class="text-secondary">未知</span>`, sortKey: "album"},
             {title: "时长", render: it => formatDuration(it.duration), sortKey: "duration"},
             {title: "播放", data: "playCount", sortKey: "playCount"},
             {title: "音质", render: it => bitRateText(it.maxBitRate), sortKey: "maxBitRate"},
-            {title: "状态", render: it => musicStateBadge(it.state), sortKey: "state", className: "text-nowrap"},
+            {title: "采集状态", render: it => musicStateBadge(it.state), sortKey: "state", className: "text-nowrap"},
+            {title: "审核", render: it => auditStateBadge(it.auditState), sortKey: "auditState", className: "text-nowrap"},
             {title: "采集时间", render: it => formatTime(it.date), sortKey: "date", className: "text-nowrap"}
         ],
         actions: [
-            {icon: "bi-pencil-square", title: "编辑", onClick: it => location.href = "/admin/music_edit.html?id=" + it.id},
             {
                 icon: "bi-trash3", title: "删除", danger: true, show: it => it.deleteFlag === 0, onClick: it => confirmDo(`确定要删除歌曲【${it.name}】吗?`, () => {
                     $.ajaxByData("/admin/api/music/delete").add("id", it.id).success(() => table.load()).post()
@@ -56,9 +86,174 @@
         ]
     })
     $(function () {
-        fillOptions("select[name='state']", MUSIC_STATES, "全部状态")
+        initPlayer()
+        fillOptions("select[name='state']", MUSIC_STATES, "全部采集状态")
+        fillOptions("select[name='auditState']", AUDIT_STATES, "全部审核状态")
         table.load()
     })
+
+    /**
+     * 审核勾选的歌曲
+     */
+    function onAuditClick(auditState) {
+        const ids = table.selected().map(it => it.id)
+        if (ids.length === 0) {
+            alert("请先勾选歌曲")
+            return
+        }
+        const text = AUDIT_STATES.find(it => it.value === auditState).text
+        confirmDo(`确定把勾选的${ids.length}首歌曲改为【${text}】吗?`, () => audit(ids, auditState))
+    }
+
+    function audit(ids, auditState) {
+        $.ajaxByData("/admin/api/music/audit").add("ids", ids.join(",")).add("auditState", auditState).success(() => {
+            if (playing && ids.includes(playing.id)) {
+                playing.auditState = auditState
+                $("#playerAudit").html(auditStateBadge(auditState))
+            }
+            table.load()
+        }).post()
+    }
+
+    // ------------------------------ 试听 ------------------------------
+
+    /** 正在播放(或暂停)的歌曲 */
+    let playing = null
+
+    /** 是否正在拖动进度条(拖动时不跟随播放进度更新) */
+    let seeking = false
+
+    const audio = document.getElementById("audio")
+
+    /**
+     * 列表里的播放按钮:采集完成的歌曲才有文件
+     */
+    function playButtonHtml(it) {
+        if (it.state !== 100) {
+            return `<button type="button" class="btn btn-outline-secondary music-play-btn" disabled title="还没有采集完成"><i class="bi bi-play-fill"></i></button>`
+        }
+        const isPlaying = playing && playing.id === it.id && !audio.paused
+        return `<button type="button" class="btn btn-outline-primary music-play-btn" data-play="${it.id}" title="试听"><i class="bi ${isPlaying ? "bi-pause-fill" : "bi-play-fill"}"></i></button>`
+    }
+
+    function initPlayer() {
+        $("#table").on("click", "[data-play]", e => {
+            const id = parseInt($(e.currentTarget).data("play"))
+            if (playing && playing.id === id) {
+                togglePlay()
+                return
+            }
+            play(table.list.find(it => it.id === id))
+        })
+        $("#playerToggle").on("click", togglePlay)
+        const $seek = $("#playerSeek")
+        $seek.on("input", () => {
+            seeking = true
+            $("#playerCurrent").text(formatSeconds($seek.val()))
+        })
+        $seek.on("change", () => {
+            audio.currentTime = parseFloat($seek.val())
+            seeking = false
+        })
+        audio.addEventListener("loadedmetadata", () => {
+            $seek.attr("max", audio.duration || 0)
+            $("#playerDuration").text(formatSeconds(audio.duration))
+        })
+        audio.addEventListener("timeupdate", () => {
+            if (!seeking) {
+                $seek.val(audio.currentTime)
+                $("#playerCurrent").text(formatSeconds(audio.currentTime))
+            }
+        })
+        audio.addEventListener("play", refreshPlayIcons)
+        audio.addEventListener("pause", refreshPlayIcons)
+        audio.addEventListener("ended", refreshPlayIcons)
+        audio.addEventListener("error", () => {
+            if (playing && audio.getAttribute("src")) {
+                alert("播放失败,请检查DairoDFS是否可以访问")
+            }
+            refreshPlayIcons()
+        })
+    }
+
+    /**
+     * 播放一首歌:停止上一首,从文件里选择标准音质(不超过128k的最高音质,都超过时用最低的)
+     */
+    function play(music) {
+        audio.pause()
+        $.ajaxByData("/admin/api/music/files").add("id", music.id).success(files => {
+            if (files.length === 0) {
+                alert("这首歌没有文件")
+                return
+            }
+            const sorted = files.slice().sort((a, b) => a.bitRate - b.bitRate)
+            const file = sorted.filter(it => it.bitRate <= 128).pop() || sorted[0]
+            if (!file.url) {
+                alert("没有配置DairoDFS,不能播放")
+                return
+            }
+            playing = music
+            $("#playerLogo").html(logoHtml(music.logoUrl))
+            $("#playerName").text(music.name || "").attr("title", music.name || "")
+            $("#playerArtist").text(music.artist || "未知歌手")
+            $("#playerQuality").text(file.bitRate >= 999 ? "无损" : file.bitRate + "k")
+            $("#playerAudit").html(auditStateBadge(music.auditState))
+            $("#playerSeek").attr("max", 0).val(0)
+            $("#playerCurrent").text("0:00")
+            $("#playerDuration").text(formatSeconds(music.duration / 1000))
+            $("#player").removeClass("d-none")
+            $("body").addClass("music-player-open")
+            audio.src = file.url
+            audio.play().catch(() => refreshPlayIcons())
+        }).get()
+    }
+
+    function togglePlay() {
+        if (!playing) {
+            return
+        }
+        if (audio.paused) {
+            audio.play().catch(() => refreshPlayIcons())
+        } else {
+            audio.pause()
+        }
+    }
+
+    /**
+     * 更新列表和控制器里的播放/暂停图标
+     */
+    function refreshPlayIcons() {
+        const isPlaying = playing && !audio.paused
+        $("#playerToggle i").attr("class", "bi " + (isPlaying ? "bi-pause-fill" : "bi-play-fill"))
+        $("#table [data-play] i").attr("class", "bi bi-play-fill")
+        if (isPlaying) {
+            $(`#table [data-play="${playing.id}"] i`).attr("class", "bi bi-pause-fill")
+        }
+    }
+
+    /**
+     * 审核正在播放的歌曲
+     */
+    function auditPlaying(auditState) {
+        if (playing) {
+            audit([playing.id], auditState)
+        }
+    }
+
+    function closePlayer() {
+        audio.pause()
+        audio.removeAttribute("src")
+        audio.load()
+        playing = null
+        $("#player").addClass("d-none")
+        $("body").removeClass("music-player-open")
+        refreshPlayIcons()
+    }
+
+    function formatSeconds(seconds) {
+        seconds = Math.floor(parseFloat(seconds) || 0)
+        return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+    }
 </script>
 </body>
 </html>

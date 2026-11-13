@@ -172,13 +172,15 @@ function formatSize(size) {
  *       pageSize: 20,
  *       columns: [{title: "标题", data: "字段名", render: item => "html", sortKey: "排序字段", className: ""}],
  *       actions: [{icon: "bi-pencil-square", title: "编辑", onClick: item => {}, show: item => true}],
+ *       selectable: false,            //是否显示勾选框,通过table.selected()获取勾选的数据
+ *       autoSearch: true,             //搜索条件变化时自动查询(输入框停止输入0.4秒后,下拉框、开关改变后),不需要查询按钮
  *       empty: "暂无数据"
  *   })
  *   table.load()
  */
 class PageTable {
     constructor(options) {
-        this.options = Object.assign({paging: true, pageSize: 20, actions: [], empty: "暂无数据"}, options)
+        this.options = Object.assign({paging: true, pageSize: 20, actions: [], empty: "暂无数据", autoSearch: true}, options)
         this.$el = $(options.el)
         this.page = 1
         this.sortKey = ""
@@ -189,6 +191,25 @@ class PageTable {
                 e.preventDefault()
                 this.load(1)
             })
+            if (this.options.autoSearch) {
+                let timer = null
+                const search = () => {
+                    clearTimeout(timer)
+
+                    //条件和上次查询的一样时不查询(比如输入后又删掉)
+                    if (JSON.stringify(this.searchParam()) !== this.lastSearch) {
+                        this.load(1)
+                    }
+                }
+                $(options.search).on("input", "input:not([type=checkbox]):not([type=radio])", () => {
+                    clearTimeout(timer)
+                    timer = setTimeout(search, 400)
+                })
+                $(options.search).on("change", "select, input[type=checkbox], input[type=radio]", search)
+
+                //按回车已经查询过了,不用再自动查询一次
+                $(options.search).on("submit", () => clearTimeout(timer))
+            }
         }
         this.$el.on("click", "th[data-sort]", e => {
             const key = $(e.currentTarget).data("sort")
@@ -204,6 +225,9 @@ class PageTable {
             const $btn = $(e.currentTarget)
             const item = this.list[parseInt($btn.data("row"))]
             this.options.actions[parseInt($btn.data("action"))].onClick(item)
+        })
+        this.$el.on("change", "input[data-select-all]", e => {
+            this.$el.find("input[data-select-row]").prop("checked", e.currentTarget.checked)
         })
         this.$el.on("click", ".page-link[data-page]", e => {
             e.preventDefault()
@@ -239,7 +263,11 @@ class PageTable {
         if (page) {
             this.page = page
         }
-        const http = $.ajaxByData(this.options.url).addAll(this.searchParam())
+        const param = this.searchParam()
+
+        //记录查询条件,自动查询时用来判断条件有没有变化
+        this.lastSearch = JSON.stringify(param)
+        const http = $.ajaxByData(this.options.url).addAll(param)
         if (this.options.paging) {
             http.add("page", this.page).add("pageSize", this.options.pageSize)
         }
@@ -255,10 +283,20 @@ class PageTable {
         }).get()
     }
 
+    /**
+     * 勾选的数据(selectable为true时)
+     */
+    selected() {
+        return this.$el.find("input[data-select-row]:checked").map((_, it) => this.list[parseInt($(it).data("select-row"))]).get()
+    }
+
     render(list, total) {
         this.list = list
         const opt = this.options
         let html = `<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr>`
+        if (opt.selectable) {
+            html += `<th style="width: 1px"><input class="form-check-input" type="checkbox" data-select-all title="全选"></th>`
+        }
         opt.columns.forEach(col => {
             if (col.sortKey) {
                 let icon = "bi-arrow-down-up text-body-tertiary"
@@ -275,11 +313,14 @@ class PageTable {
         }
         html += `</tr></thead><tbody>`
         if (list.length === 0) {
-            const span = opt.columns.length + (opt.actions.length > 0 ? 1 : 0)
+            const span = opt.columns.length + (opt.actions.length > 0 ? 1 : 0) + (opt.selectable ? 1 : 0)
             html += `<tr><td colspan="${span}" class="text-center text-secondary py-5"><i class="bi bi-inbox fs-3 d-block mb-1"></i>${opt.empty}</td></tr>`
         }
         list.forEach((item, row) => {
             html += `<tr>`
+            if (opt.selectable) {
+                html += `<td><input class="form-check-input" type="checkbox" data-select-row="${row}"></td>`
+            }
             opt.columns.forEach(col => {
                 const value = col.render ? col.render(item) : escapeHtml(item[col.data])
                 html += `<td class="${col.className || ""}">${value}</td>`
@@ -403,18 +444,34 @@ function logoHtml(url, size = 40) {
 
 /** 歌曲状态 */
 const MUSIC_STATES = [
-    {value: 100, text: "正常"},
+    {value: 100, text: "采集完成"},
     {value: 0, text: "采集中"},
-    {value: 1, text: "采集失败"},
-    {value: 2, text: "审核中"},
-    {value: 3, text: "审核失败"}
+    {value: 1, text: "采集失败"}
 ]
+
+/**
+ * 歌曲审核状态(被拒绝的歌曲APP搜索不显示)
+ */
+const AUDIT_STATES = [
+    {value: 0, text: "待审核"},
+    {value: 1, text: "通过"},
+    {value: 2, text: "拒绝"}
+]
+
+/**
+ * 歌曲审核状态标签
+ */
+function auditStateBadge(state) {
+    const colors = {0: "warning", 1: "success", 2: "danger"}
+    const item = AUDIT_STATES.find(it => it.value === state)
+    return item ? badge(item.text, colors[state]) : ""
+}
 
 /**
  * 歌曲状态标签
  */
 function musicStateBadge(state) {
-    const colors = {100: "success", 0: "info", 1: "danger", 2: "warning", 3: "danger"}
+    const colors = {100: "success", 0: "info", 1: "danger"}
     const item = MUSIC_STATES.find(it => it.value === state)
     return item ? badge(item.text, colors[state]) : ""
 }
