@@ -1,0 +1,60 @@
+pipeline {
+    agent any
+
+    environment {
+        REPO = "DAIRO-HY/DairoMUSIC"
+        BRANCH = "main"
+        PROJECT_DIR = "/root/develop_tool/project"
+        PROJECT_NAME = "DairoMUSIC"
+
+        //Jenkins容器里的/root在宿主机上的路径
+        //编译时通过宿主机的docker启动rust容器,挂载的代码目录和cargo目录必须是宿主机上的绝对路径
+        HOST_ROOT_DIR = "/home/docker/jenkins+jdk17+docker/data"
+
+        //macOS SDK:交叉编译macOS版本时使用,在Mac上执行document/build/pack_macos_sdk.sh打包
+        //解压到宿主机的 $HOST_ROOT_DIR/develop_tool/MacOSX.sdk (Jenkins容器里是/root/develop_tool/MacOSX.sdk),不存在时跳过macOS版本
+    }
+
+    stages {
+        stage("拉取代码") {
+            steps {
+                script{
+                    if(!fileExists("${env.PROJECT_DIR}")){
+                        sh "mkdir -p ${env.PROJECT_DIR}"
+                    }
+                    dir("${env.PROJECT_DIR}"){
+                        if(!fileExists("${env.PROJECT_NAME}")){
+
+                            //克隆地址里有票据,用单引号由shell读取环境变量,不要输出到日志
+                            sh 'git clone --branch "$BRANCH" "https://${GITHUB_TOKEN}@github.com/${REPO}.git"'
+                        }
+                    }
+                }
+                dir("${env.PROJECT_DIR}/${env.PROJECT_NAME}"){
+
+                    //撤销所有修改
+                    sh "git reset --hard HEAD"
+
+                    //删除所有未被跟踪的文件和目录
+                    // sh "git clean -fd"
+                    sh "git pull"
+                }
+            }
+        }
+        stage("编译") {
+            steps {
+                dir("${env.PROJECT_DIR}/${env.PROJECT_NAME}"){
+
+                    //build_music.sh、build_music_cross.sh通过这些环境变量获取挂载到rust容器的宿主机路径
+                    //每个架构使用单独的编译目录(target/linux-amd64、target/linux-arm64),下次只编译有变化的部分
+                    sh '''
+                        export HOST_PROJECT_DIR="$HOST_ROOT_DIR/develop_tool/project/$PROJECT_NAME"
+                        export HOST_CARGO_DIR="$HOST_ROOT_DIR/develop_tool/.cargo"
+                        export HOST_MACOS_SDK="$HOST_ROOT_DIR/develop_tool/MacOSX.sdk"
+                        ./document/build/build_all.sh
+                    '''
+                }
+            }
+        }
+    }
+}

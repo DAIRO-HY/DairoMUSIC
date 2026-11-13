@@ -1,0 +1,25 @@
+services:
+  dairo-music:
+    image: dairopapa/dairo-music:2.0.0
+    restart: always
+    container_name: dairo-music
+
+    #使用宿主机网络:内置DairoDFS、采集服务设置成「直接访问」时,它们的端口也能被客户端访问
+    #客户端访问方式使用默认的「通过DairoMUSIC代理」时,也可以改成只映射DairoMUSIC的端口
+    network_mode: host
+    #ports:
+    #  - 8020:8020
+
+    environment:
+      #时区
+      TZ: Asia/Shanghai
+
+      #WEB端口,默认8020
+      DAIRO_MUSIC_WEB_PORT: 8020
+    volumes:
+      #数据库、后台安装的DairoDFS、采集服务、依赖软件及它们的数据都在这个目录下
+      - ./data:/app/data
+
+      #内置DFS的文件存储目录默认是/app/data/dfs/storage
+      #需要把歌曲文件放到其他硬盘时,挂载进来,然后在后台「DairoDFS配置」里把文件存储目录设置成/mnt/music-data(第一次初始化之前设置)
+      #- /mnt/data-music:/mnt/music-data

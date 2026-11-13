@@ -368,7 +368,12 @@ async fn read_output(sw: &'static Software, reader: impl AsyncRead + Unpin) {
 }
 
 /// 停止进程:先发送SIGINT让它正常退出,10秒内没有退出时强制结束
+/// DFS没有处理退出信号,直接结束(数据库有事务保护,正在上传的文件客户端可以续传)
 async fn kill(sw: &Software, child: &mut Child) {
+    if sw == &DFS {
+        let _ = child.kill().await;
+        return;
+    }
     #[cfg(unix)]
     if let Some(pid) = child.id() {
         unsafe {

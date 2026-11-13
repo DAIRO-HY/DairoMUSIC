@@ -279,9 +279,9 @@ async fn do_init_builtin() -> Result<(), String> {
     let config = config_service::get();
     let base = api_base(&config);
 
-    //等待DFS启动完成(能响应请求)
+    //等待DFS启动完成(能响应请求),启动后尽快创建管理员
     let mut initialized = None;
-    for _ in 0..60 {
+    for _ in 0..300 {
         if !process_service::is_running(&DFS) {
             return Ok(());
         }
@@ -293,7 +293,7 @@ async fn do_init_builtin() -> Result<(), String> {
         if process_service::info(&DFS).status != "running" {
             return Ok(());
         }
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
     }
     let Some(initialized) = initialized else {
         return Err("等待DFS启动超时".to_string());
@@ -314,7 +314,10 @@ async fn do_init_builtin() -> Result<(), String> {
         } else {
             config.dfs_admin_pwd.clone()
         };
-        post_form(&base, "/api/install/create_admin", None, &[("name", &name), ("pwd", &pwd)]).await?;
+        //管理员只能创建一次,失败说明已经被别人创建了
+        post_form(&base, "/api/install/create_admin", None, &[("name", &name), ("pwd", &pwd)])
+            .await
+            .map_err(|e| format!("创建管理员失败,DFS的管理员可能已经被别人创建,请检查DFS: {}", e))?;
         process_service::log(&DFS, format!("已创建管理员: {},存储目录: {}", name, folders));
     }
 

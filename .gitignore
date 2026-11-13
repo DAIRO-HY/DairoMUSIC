@@ -4,3 +4,4 @@ data/
 /build/
 .DS_Store
 /mysql_migrate/
+/push_github_tag.log
