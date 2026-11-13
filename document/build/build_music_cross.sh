@@ -29,38 +29,48 @@ host_cargo_registry=${HOST_CARGO_REGISTRY:-$host_cargo_dir/registry}
 
 #macOS SDK(解压后的MacOSX.sdk目录),默认 ~/develop_tool/MacOSX.sdk,不存在时跳过macOS版本
 #MACOS_SDK:当前环境里的路径,用来判断是否存在
-#HOST_MACOS_SDK:宿主机上的路径,挂载到编译容器(在Jenkins容器里执行时两者不同)
+#HOST_MACOS_SDK:宿主机上的路径,挂载到编译容器(在Jenkins容器里执行时两者不同,一定要传宿主机上的路径)
 macos_sdk=${MACOS_SDK:-$HOME/develop_tool/MacOSX.sdk}
 host_macos_sdk=${HOST_MACOS_SDK:-$macos_sdk}
 
-#构建交叉编译环境的镜像(只有第一次和Dockerfile修改之后才会真正构建)
-#构建过程不会继承docker的代理设置,需要手动传入,否则下载zig、cargo-zigbuild会失败
-cross_image=dairo-music-cross:1.99.1
+#构建、编译过程不会继承docker的代理设置,需要手动传入,否则下载zig、cargo-zigbuild、依赖会失败
 proxy=$(docker info --format '{{.HTTPSProxy}}')
 proxy_args=""
+proxy_opts=""
 if [ -n "$proxy" ]; then
   [[ "$proxy" == *://* ]] || proxy="http://$proxy"
   proxy_args="--build-arg http_proxy=$proxy --build-arg https_proxy=$proxy"
+  proxy_opts="-e http_proxy=$proxy -e https_proxy=$proxy"
 fi
-docker build --platform linux/amd64 $proxy_args -t $cross_image $script_dir/cross_dockerfile
+
+#构建交叉编译环境的镜像(只有第一次和Dockerfile修改之后才会真正构建)
+#使用宿主机的网络:有的服务器上docker默认网络(bridge)里解析不了域名,构建时会报 Could not resolve host
+cross_image=dairo-music-cross:1.99.1
+docker build --network host --platform linux/amd64 $proxy_args -t $cross_image $script_dir/cross_dockerfile
 
 # 编译并复制到build目录
 # $1:编译目标 $2:编译后的文件名 $3:发布的文件名
 cross_build(){
   sdk_opts=""
+  sdk_check=""
   if [[ "$1" == *-apple-darwin ]]; then
     #链接时zig会把-L、-F的路径加上SDK目录作为前缀,所以这里写SDK里的相对路径
     target_env=$(echo "$1" | tr 'a-z-' 'A-Z_')
     sdk_opts="-v $host_macos_sdk:/opt/MacOSX.sdk:ro -e SDKROOT=/opt/MacOSX.sdk"
     sdk_opts="$sdk_opts -e CARGO_TARGET_${target_env}_RUSTFLAGS=-Lnative=/usr/lib"
+
+    #挂载的路径在宿主机上不存在时docker会挂一个空目录,要到链接时才报找不到iconv,所以编译前先检查
+    sdk_check="if [ ! -f /opt/MacOSX.sdk/usr/lib/libSystem.tbd ]; then echo '编译容器里没有macOS SDK,请检查HOST_MACOS_SDK是不是宿主机上的路径:$host_macos_sdk'; exit 1; fi; "
   fi
-  docker run --platform linux/amd64 --rm \
+
+  #每个目标使用单独的子目录(target/cross/<目标>),下次只编译有变化的部分
+  docker run --platform linux/amd64 --rm $proxy_opts \
     -v $host_project_dir:/home/rust/src \
     -v $host_cargo_registry:/usr/local/cargo/registry \
     -e CARGO_TARGET_DIR=/home/rust/src/target/cross \
     $sdk_opts \
     -w /home/rust/src $cross_image \
-    sh -c "cargo zigbuild --release --package DairoMUSIC --target $1"
+    sh -c "${sdk_check}cargo zigbuild --release --package DairoMUSIC --target $1"
   cp $project_root/target/cross/$1/release/$2 $project_root/build/$3
 }
 
