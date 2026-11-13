@@ -32,6 +32,9 @@ DairoMUSIC是一个音乐服务端，为DairoMUSIC客户端提供曲库、歌单
 
 只需要DairoMUSIC一个程序。DairoDFS、采集服务、FFmpeg等都可以在启动之后从后台安装（上传安装包，或者填写下载地址），不需要另外配置环境。
 
+可以从[GitHub Releases](https://github.com/DAIRO-HY/DairoMUSIC/releases)下载各平台的可执行文件，或者使用Docker镜像`dairopapa/dairo-music`（参考[docker-compose.yml](./document/build/music_dockerfile/docker-compose.yml)）。<br>
+※Linux版本需要glibc 2.39以上（Debian 13、Ubuntu 24.04及以上），旧系统请用Docker运行。
+
 # 3. 编译和运行
 
 需要安装[Rust](https://www.rust-lang.org/)（stable版本）。
