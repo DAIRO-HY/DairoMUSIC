@@ -3,7 +3,8 @@
 use crate::dao::music_file_dao::MusicFile;
 use crate::dao::music_collect_dao::MusicCollect;
 use crate::dao::music_video_dao::MusicVideo;
-use crate::dao::{music_collect_dao, music_dao, music_file_dao, music_video_dao};
+use crate::dao::music_lrc_dao::MusicLrc;
+use crate::dao::{music_collect_dao, music_dao, music_file_dao, music_lrc_dao, music_video_dao};
 use crate::dao::music_dao::Music;
 use crate::service::{collect_service, dfs_service, video_task};
 use crate::util::time_util;
@@ -194,6 +195,63 @@ pub async fn edit(form: form::MusicEdit) -> Result<(), BizError> {
     }
     music_dao::update_by_admin(&mut ctx, form.id, non_empty(Some(form.name)), non_empty(Some(form.artist)), non_empty(Some(form.album))).await?;
     ctx.commit().await?;
+    Ok(())
+}
+
+/// 歌曲的歌词(一首歌可以有多个歌词,APP里审核通过的排在前面)
+#[GET("/admin/api/music/lrcs")]
+pub async fn lrcs(id: i64) -> Result<Vec<MusicLrc>, BizError> {
+    let mut ctx = lib_db::get_context();
+    Ok(music_lrc_dao::select_by_music(&mut ctx, id).await?)
+}
+
+/// 添加、修改歌词
+#[POST("/admin/api/music/lrc_save")]
+pub async fn lrc_save(form: form::MusicLrcEdit) -> Result<(), BizError> {
+    if let Err(e) = form.validate() {
+        return Err(BizError::fields(e));
+    }
+    if form.lrc.trim().is_empty() {
+        return Err(BizError::field("lrc", "歌词内容不能为空"));
+    }
+    if ![0, 1].contains(&form.state) {
+        return Err(BizError::field("state", "状态不正确"));
+    }
+    let title = form.title.trim();
+    let title = if title.is_empty() { "后台添加" } else { title }.to_string();
+    let mut ctx = db::begin().await?;
+    if form.id == 0 {
+        if music_dao::select_one(&mut ctx, form.music_id).await.is_err() {
+            return Err(biz_error!("歌曲不存在"));
+        }
+        let lrc = MusicLrc {
+            musicId: form.music_id,
+            title,
+            lrc: form.lrc,
+            state: form.state,
+            ..Default::default()
+        };
+        music_lrc_dao::insert(&mut ctx, &lrc).await?;
+    } else {
+        //只能修改这首歌的歌词
+        let mut lrc = match music_lrc_dao::select_one(&mut ctx, form.id).await {
+            Ok(it) if it.musicId == form.music_id => it,
+            _ => return Err(biz_error!("歌词不存在")),
+        };
+        lrc.title = title;
+        lrc.lrc = form.lrc;
+        lrc.state = form.state;
+        music_lrc_dao::update(&mut ctx, &lrc).await?;
+    }
+    ctx.commit().await?;
+    Ok(())
+}
+
+/// 删除歌词
+#[POST("/admin/api/music/lrc_delete")]
+pub async fn lrc_delete(id: i64) -> Result<(), BizError> {
+    let mut ctx = lib_db::get_context();
+    music_lrc_dao::delete(&mut ctx, id).await?;
     Ok(())
 }
 

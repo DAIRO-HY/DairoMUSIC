@@ -176,6 +176,32 @@ pub struct MusicEdit {
     pub album: String,
 }
 
+/// 添加、修改歌词
+#[derive(Deserialize, Validate, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicLrcEdit {
+    // 歌词ID,0表示添加
+    #[serde(default)]
+    pub id: i64,
+
+    // 歌曲ID
+    pub music_id: i64,
+
+    // 歌词标题
+    #[serde(default)]
+    #[validate(length(max = 32, message = "标题长度不能超过32位"))]
+    pub title: String,
+
+    // 歌词内容
+    #[serde(default)]
+    #[validate(length(min = 1, max = 500000, message = "歌词内容不能为空,长度不能超过50万字"))]
+    pub lrc: String,
+
+    // 歌词状态 0:未审核 1:审核通过
+    #[serde(default)]
+    pub state: i64,
+}
+
 /// 批量审核歌曲
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

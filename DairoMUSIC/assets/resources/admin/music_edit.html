@@ -42,6 +42,28 @@
                 <div class="app-card-title d-flex align-items-center flex-wrap gap-2">歌曲文件 <span id="collectState"></span></div>
                 <div id="files"></div>
             </div>
+            <div class="app-card">
+                <div class="app-card-title d-flex align-items-center">歌词
+                    <button type="button" class="btn btn-outline-primary btn-sm ms-auto" onclick="onLrcEditClick(0)"><i class="bi bi-plus-lg me-1"></i>添加歌词</button>
+                </div>
+                <div id="lrcs"></div>
+                <form id="lrcForm" class="d-none mt-3" onsubmit="onLrcSaveClick();return false;">
+                    <input type="hidden" name="id">
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                        <input name="title" class="form-control" placeholder="标题" maxlength="32" autocomplete="off" style="max-width: 240px">
+                        <select name="state" class="form-select" style="max-width: 150px">
+                            <option value="0">未审核</option>
+                            <option value="1">审核通过</option>
+                        </select>
+                    </div>
+                    <textarea name="lrc" class="form-control font-monospace small" rows="16" spellcheck="false" placeholder="歌词内容"></textarea>
+                    <div class="form-text">一首歌可以有多个歌词,APP里审核通过的排在前面</div>
+                    <div class="mt-2">
+                        <button type="submit" class="btn btn-primary px-4">保存歌词</button>
+                        <button type="button" class="btn btn-light ms-2" onclick="closeLrcForm()">取消</button>
+                    </div>
+                </form>
+            </div>
             <div id="videoCard" class="app-card d-none">
                 <div class="app-card-title d-flex align-items-center flex-wrap gap-2">视频 <span id="videoState"></span>
                     <span class="ms-auto"></span>
@@ -78,6 +100,7 @@
                 ["删除状态", data.deleteFlag === 1 ? "已删除 " + formatTime(data.deleteTime) : "正常"]
             ]
             loadFiles()
+            loadLrcs()
             loadCollect()
             loadVideos(data.videoState)
             $("#info").html(rows.map(([k, v]) => `<dt class="col-5 text-secondary fw-normal">${k}</dt><dd class="col-7">${v}</dd>`).join(""))
@@ -101,6 +124,77 @@
             html += `</tbody></table></div>`
             $("#files").html(html)
         }).get()
+    }
+
+    /** 这首歌的歌词列表 */
+    let lrcList = []
+
+    /**
+     * 歌词列表
+     */
+    function loadLrcs() {
+        $.ajaxByData("/admin/api/music/lrcs").add("id", id).hide().success(list => {
+            lrcList = list
+            if (list.length === 0) {
+                $("#lrcs").html(`<div class="text-secondary">没有歌词</div>`)
+                return
+            }
+            let html = `<div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>标题</th><th>来源</th><th>状态</th><th>行数</th><th class="text-end">操作</th></tr></thead><tbody>`
+            list.forEach(it => {
+                html += `<tr>
+                    <td><a href="javascript:onLrcEditClick(${it.id})" class="text-decoration-none">${escapeHtml(it.title)}</a></td>
+                    <td>${escapeHtml(it.source === "YT" ? "YouTube采集" : (it.source || "后台添加"))}</td>
+                    <td>${it.state === 1 ? badge("审核通过", "success") : badge("未审核", "secondary")}</td>
+                    <td>${it.lrc.split("\n").length}</td>
+                    <td class="text-end text-nowrap">
+                        <button type="button" class="btn btn-sm btn-link px-1" onclick="onLrcEditClick(${it.id})" title="查看、编辑"><i class="bi bi-pencil-square"></i></button>
+                        <button type="button" class="btn btn-sm btn-link px-1 text-danger" onclick="onLrcDeleteClick(${it.id})" title="删除"><i class="bi bi-trash3"></i></button>
+                    </td>
+                </tr>`
+            })
+            html += `</tbody></table></div>`
+            $("#lrcs").html(html)
+        }).get()
+    }
+
+    /**
+     * 查看、编辑歌词,lrcId为0时添加
+     */
+    function onLrcEditClick(lrcId) {
+        const lrc = lrcList.find(it => it.id === lrcId) || {id: 0, title: "", lrc: "", state: 1}
+        const $form = $("#lrcForm")
+        $form.find("[name='id']").val(lrc.id)
+        $form.find("[name='title']").val(lrc.title)
+        $form.find("[name='state']").val(lrc.state)
+        $form.find("[name='lrc']").val(lrc.lrc)
+        $form.removeClass("d-none")
+
+        //从歌词的开头显示(赋值后光标在末尾,直接获取焦点会滚动到最后)
+        const text = $form.find("[name='lrc']")[0]
+        text.focus()
+        text.setSelectionRange(0, 0)
+        text.scrollTop = 0
+    }
+
+    function closeLrcForm() {
+        $("#lrcForm").addClass("d-none")
+    }
+
+    function onLrcSaveClick() {
+        $("#lrcForm").ajaxByForm("/admin/api/music/lrc_save").add("musicId", id).success(() => {
+            closeLrcForm()
+            loadLrcs()
+        }).post()
+    }
+
+    function onLrcDeleteClick(lrcId) {
+        const lrc = lrcList.find(it => it.id === lrcId)
+        confirmDo(`确定要删除歌词【${lrc.title}】吗?`, () => {
+            $.ajaxByData("/admin/api/music/lrc_delete").add("id", lrcId).success(() => {
+                closeLrcForm()
+                loadLrcs()
+            }).post()
+        })
     }
 
     /**
