@@ -12,7 +12,7 @@ use std::time::Duration;
 struct Assets;
 
 /// 数据库版本号
-const VERSION: i32 = 5;
+const VERSION: i32 = 6;
 
 /// 数据库文件名
 pub const DB_FILE_NAME: &str = "dairo-music.sqlite";
@@ -80,6 +80,13 @@ alter table music add column auditState INTEGER NOT NULL default 0;
 update music set auditState = case state when 100 then 1 when 3 then 2 else 0 end;
 update music set state = 100 where state in (2, 3);
 CREATE INDEX idx_music_audit_state ON music (auditState);
+";
+
+/// 版本5升级到版本6:歌曲的state只表示采集状态,改名为collectState
+const UPGRADE_V6: &str = "
+alter table music rename column state to collectState;
+DROP INDEX idx_music_state;
+CREATE INDEX idx_music_collected ON music (collectState);
 ";
 
 /// 全新安装时的初始数据(菜单、超级管理员角色)
@@ -194,6 +201,11 @@ async fn upgrade(with_init_data: bool) -> Result<(), Box<dyn Error>> {
         if version < 5 {
             let mut tx = (&mut *conn).begin().await?;
             sqlx::raw_sql(UPGRADE_V5).execute(&mut *tx).await?;
+            tx.commit().await?;
+        }
+        if version < 6 {
+            let mut tx = (&mut *conn).begin().await?;
+            sqlx::raw_sql(UPGRADE_V6).execute(&mut *tx).await?;
             tx.commit().await?;
         }
     }

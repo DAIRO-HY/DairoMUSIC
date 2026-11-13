@@ -13,7 +13,7 @@
             <input name="name" class="form-control" placeholder="歌名" style="width: 170px">
             <input name="artist" class="form-control" placeholder="歌手" style="width: 140px">
             <input name="album" class="form-control" placeholder="专辑" style="width: 140px">
-            <select name="state" class="form-select" style="width: 130px"></select>
+            <select name="collectState" class="form-select" style="width: 130px"></select>
             <select name="auditState" class="form-select" style="width: 130px"></select>
             <select name="deleteFlag" class="form-select" style="width: 120px">
                 <option value="">全部</option>
@@ -68,7 +68,7 @@
             {title: "时长", render: it => formatDuration(it.duration), sortKey: "duration"},
             {title: "播放", data: "playCount", sortKey: "playCount"},
             {title: "音质", render: it => bitRateText(it.maxBitRate), sortKey: "maxBitRate"},
-            {title: "采集状态", render: it => musicStateBadge(it.state), sortKey: "state", className: "text-nowrap"},
+            {title: "采集状态", render: it => musicStateBadge(it.collectState), sortKey: "collectState", className: "text-nowrap"},
             {title: "审核", render: it => auditStateBadge(it.auditState), sortKey: "auditState", className: "text-nowrap"},
             {title: "采集时间", render: it => formatTime(it.date), sortKey: "date", className: "text-nowrap"}
         ],
@@ -87,7 +87,7 @@
     })
     $(function () {
         initPlayer()
-        fillOptions("select[name='state']", MUSIC_STATES, "全部采集状态")
+        fillOptions("select[name='collectState']", MUSIC_STATES, "全部采集状态")
         fillOptions("select[name='auditState']", AUDIT_STATES, "全部审核状态")
         table.load()
     })
@@ -129,7 +129,7 @@
      * 列表里的播放按钮:采集完成的歌曲才有文件
      */
     function playButtonHtml(it) {
-        if (it.state !== 100) {
+        if (it.collectState !== 100) {
             return `<button type="button" class="btn btn-outline-secondary music-play-btn" disabled title="还没有采集完成"><i class="bi bi-play-fill"></i></button>`
         }
         const isPlaying = playing && playing.id === it.id && !audio.paused

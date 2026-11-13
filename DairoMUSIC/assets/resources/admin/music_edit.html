@@ -30,25 +30,16 @@
                         <label class="form-label">歌手</label>
                         <input name="artist" class="form-control" autocomplete="off" style="max-width: 320px">
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label class="form-label">专辑</label>
                         <input name="album" class="form-control" autocomplete="off" style="max-width: 320px">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">审核状态</label>
-                        <select name="auditState" class="form-select" style="max-width: 200px"></select>
-                        <div class="form-text">被拒绝的歌曲APP搜索不显示,已经加入歌单、收藏的仍可以播放</div>
-                    </div>
-                    <div class="mb-4">
-                        <label class="form-label">采集状态</label>
-                        <select name="state" class="form-select" style="max-width: 200px"></select>
                     </div>
                     <button type="submit" class="btn btn-primary px-4">保存</button>
                     <a class="btn btn-light ms-2" href="javascript:history.back()">返回</a>
                 </form>
             </div>
             <div class="app-card">
-                <div class="app-card-title">歌曲文件</div>
+                <div class="app-card-title d-flex align-items-center flex-wrap gap-2">歌曲文件 <span id="collectState"></span></div>
                 <div id="files"></div>
             </div>
             <div id="videoCard" class="app-card d-none">
@@ -72,13 +63,13 @@
     const id = getParam("id", "0")
 
     $(function () {
-        fillOptions("select[name='state']", MUSIC_STATES)
-        fillOptions("select[name='auditState']", AUDIT_STATES)
         $.ajaxByData("/admin/api/music/detail").add("id", id).success(data => {
             $("#form").bindValue(data)
             $("#logo").html(logoHtml(data.logoUrl, 180))
+            $("#collectState").html(musicStateBadge(data.collectState))
             const rows = [
                 ["ID", data.id],
+                ["审核状态", auditStateBadge(data.auditState)],
                 ["时长", formatDuration(data.duration)],
                 ["音质", bitRateText(data.maxBitRate)],
                 ["播放次数", data.playCount],
@@ -182,7 +173,11 @@
 
     function onRecollectClick() {
         confirmDo("确定要重新处理这首歌吗?", () => {
-            $.ajaxByData("/admin/api/music/recollect").add("id", id).success(() => loadCollect()).post()
+            $.ajaxByData("/admin/api/music/recollect").add("id", id).success(() => {
+                //重新处理时歌曲改为采集中
+                $("#collectState").html(musicStateBadge(0))
+                loadCollect()
+            }).post()
         })
     }
 

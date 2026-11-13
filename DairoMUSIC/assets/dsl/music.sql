@@ -5,7 +5,7 @@
 -- @param name:String? 歌名(模糊匹配)
 -- @param artist:String? 歌手(模糊匹配)
 -- @param album:String? 专辑(模糊匹配)
--- @param state:i64?
+-- @param collect_state:i64?
 -- @param audit_state:i64?
 -- @param delete_flag:i64?
 -- @return Music
@@ -22,8 +22,8 @@ and artist like '%' || :artist || '%'
 -- @if album != null
 and album like '%' || :album || '%'
 -- @end
--- @if state != null
-and state = :state
+-- @if collect_state != null
+and collectState = :collect_state
 -- @end
 -- @if audit_state != null
 and auditState = :audit_state
@@ -40,9 +40,7 @@ and deleteFlag = :delete_flag
 -- @param name:String?
 -- @param artist:String?
 -- @param album:String?
--- @param state:i64
--- @param audit_state:i64
-update music set name = :name, artist = :artist, album = :album, state = :state, auditState = :audit_state where id = :id;
+update music set name = :name, artist = :artist, album = :album where id = :id;
 
 -- ------------------------------
 
@@ -114,7 +112,7 @@ group by name having count(*) > 1
 -- @param artist:String?
 -- @param ignore_artist:i64 1:忽略歌手
 -- @return List<SelectSameTemp>
-select m.id, m.name, m.artist, m.album, m.logo, m.duration, m.state, m.auditState, m.maxBitRate, m.playCount,
+select m.id, m.name, m.artist, m.album, m.logo, m.duration, m.collectState, m.auditState, m.maxBitRate, m.playCount,
        (select f.size from music_file f where f.musicId = m.id order by f.bitRate desc limit 1) as size,
        (select f.format from music_file f where f.musicId = m.id order by f.bitRate desc limit 1) as format
 from music m
@@ -128,7 +126,7 @@ order by m.maxBitRate desc, m.id;
 -- @name select_detail
 -- @param id:i64
 -- @return MusicDetailTemp?
-select m.id, m.name, m.artist, m.album, m.logo, m.duration, m.maxBitRate, m.state, m.videoState, c.platform, c.extra
+select m.id, m.name, m.artist, m.album, m.logo, m.duration, m.maxBitRate, m.collectState, m.auditState, m.videoState, c.platform, c.extra
 from music m
          left join music_collect c on c.musicId = m.id
 where m.id = :id and m.deleteFlag = 0;
@@ -140,7 +138,7 @@ where m.id = :id and m.deleteFlag = 0;
 -- @param keys:List<String>
 -- @param is_test:i64 1:只搜索测试歌曲
 -- @return List<Music>
-select * from music where deleteFlag = 0 and state = 100 and auditState != 2 and (:is_test = 0 or testFlag = 1)
+select * from music where deleteFlag = 0 and collectState = 100 and auditState != 2 and (:is_test = 0 or testFlag = 1)
 -- @each keys seq=" or " open="and (" close=")" item="key"
 name like '%' || :key || '%' or artist like '%' || :key || '%'
 -- @end
@@ -169,7 +167,7 @@ update music set name = :name, artist = :artist, album = :album where id = :id;
 -- @param year:i64?
 -- @param max_bit_rate:i64
 update music set name = :name, artist = :artist, album = :album, logo = :logo, duration = :duration,
-                 year = :year, maxBitRate = :max_bit_rate, state = 100
+                 year = :year, maxBitRate = :max_bit_rate, collectState = 100
 where id = :id;
 
 -- ------------------------------
@@ -177,7 +175,7 @@ where id = :id;
 -- 采集失败(只修改还在采集中的歌曲)
 -- @name set_collect_fail
 -- @param id:i64
-update music set state = 1 where id = :id and state = 0;
+update music set collectState = 1 where id = :id and collectState = 0;
 
 -- ------------------------------
 
@@ -192,7 +190,7 @@ update music set maxBitRate = :max_bit_rate where id = :id;
 -- 重新采集时状态改回采集中
 -- @name set_collecting
 -- @param id:i64
-update music set state = 0 where id = :id;
+update music set collectState = 0 where id = :id;
 
 -- ------------------------------
 

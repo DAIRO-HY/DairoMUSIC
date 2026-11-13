@@ -37,7 +37,7 @@ delete from user_music where favoriteId = :favorite_id and musicId = :music_id;
 -- @param favorite_id:i64
 -- @param is_test:i64 1:只返回测试歌曲
 -- @return List<FavoriteMusicTemp>
-select m.id, m.name, m.artist, m.album, m.logo, m.duration, m.maxBitRate, m.state, m.videoState, um.favoriteId, c.platform, c.extra
+select m.id, m.name, m.artist, m.album, m.logo, m.duration, m.maxBitRate, m.collectState, m.videoState, um.favoriteId, c.platform, c.extra
 from user_music um
          inner join music m on um.musicId = m.id
          left join music_collect c on c.musicId = m.id
@@ -50,7 +50,7 @@ order by um.sort desc;
 -- @name select_music_by_user
 -- @param user_id:i64
 -- @return List<FavoriteMusicTemp>
-select m.id, m.name, m.artist, m.album, m.logo, m.duration, m.maxBitRate, m.state, m.videoState, um.favoriteId, c.platform, c.extra
+select m.id, m.name, m.artist, m.album, m.logo, m.duration, m.maxBitRate, m.collectState, m.videoState, um.favoriteId, c.platform, c.extra
 from user_music um
          inner join user_favorite uf on uf.id = um.favoriteId
          inner join music m on um.musicId = m.id
