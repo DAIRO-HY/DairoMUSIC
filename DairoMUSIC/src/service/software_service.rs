@@ -613,6 +613,7 @@ pub async fn recommend(sw: &'static Software) -> Result<Recommend, String> {
                 ("macos", "aarch64") => "mac-darwin-aarch64",
                 ("macos", "x86_64") => "mac-darwin-amd64",
                 ("windows", "x86_64") => "win-amd64",
+                ("windows", "aarch64") => "win-arm64",
                 _ => return Err(unsupported()),
             };
             github_latest("DAIRO-HY/DairoDFS", |name| name.starts_with(&format!("DairoDFS-{}-", platform))).await
