@@ -1,7 +1,7 @@
-//! 后台采集歌曲视频(只有采集平台的歌曲有视频)
-//! 视频文件大、转码很耗CPU,同一时间只处理一首歌曲
-//! 1. 等采集服务采集好最高规格的视频后下载
-//! 2. 判断是不是只有一张图片,只有图片时认为没有视频
+//! 后台处理歌曲视频:从采集平台采集(只有采集平台的歌曲),或者后台手动上传(所有歌曲都可以)
+//! 视频文件大、转码很耗CPU,同一时间只处理一首歌曲;手动上传的优先处理
+//! 1. 等采集服务采集好最高规格的视频后下载(手动上传的直接使用上传的文件)
+//! 2. 判断是不是只有一张图片,只有图片时认为没有视频(手动上传的不判断)
 //! 3. 原画高于480p或高于25fps时先转码流畅版(480p 25fps)(很快就能播放),再处理原画(VP9、AV1等转码成HEVC)
 //! 4. 上传到DairoDFS
 
@@ -44,6 +44,53 @@ const MAX_FAIL_REPLY: usize = 3;
 
 /// 允许的最大视频文件
 const MAX_SIZE: u64 = 20 * 1024 * 1024 * 1024;
+
+/// 后台可以上传的视频格式
+pub const UPLOAD_EXTS: [&str; 8] = ["mp4", "mov", "m4v", "mkv", "webm", "avi", "flv", "ts"];
+
+/// 后台上传的视频允许的最大大小
+pub const UPLOAD_MAX_SIZE: u64 = MAX_SIZE;
+
+/// 视频的来源
+enum Source {
+    // 采集平台,参数是采集平台的视频ID
+    Platform(String),
+
+    // 后台手动上传,参数是上传的文件
+    Upload(PathBuf),
+}
+
+/// 后台手动上传的视频的保存目录,文件名是 {歌曲ID}.{扩展名},上传完成之后由后台任务处理
+pub fn upload_dir() -> PathBuf {
+    PathBuf::from(&application::ARGS.data_dir).join("upload_video")
+}
+
+/// 上传目录里等待处理的视频:(歌曲ID, 文件),还在上传的文件(.uploading)不算
+async fn pending_uploads() -> Vec<(i64, PathBuf)> {
+    let mut list = Vec::new();
+    let Ok(mut dir) = tokio::fs::read_dir(upload_dir()).await else {
+        return list;
+    };
+    while let Ok(Some(entry)) = dir.next_entry().await {
+        let path = entry.path();
+        let ext = path.extension().and_then(|it| it.to_str()).unwrap_or_default().to_lowercase();
+        let id = path.file_stem().and_then(|it| it.to_str()).and_then(|it| it.parse::<i64>().ok());
+        if let Some(id) = id.filter(|_| UPLOAD_EXTS.contains(&ext.as_str())) {
+            list.push((id, path));
+        }
+    }
+    list.sort();
+    list
+}
+
+/// 删除歌曲等待处理的上传视频(重新上传、删除视频、重新采集时)
+pub async fn remove_upload(music_id: i64) {
+    for (id, path) in pending_uploads().await {
+        if id == music_id {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+    }
+}
 
 /// 唤醒任务
 static WAKE: Notify = Notify::const_new();
@@ -125,6 +172,24 @@ async fn reset_processing() -> Result<(), sqlx::Error> {
 
 /// 处理下一首歌曲,返回是否处理了
 async fn next() -> Result<bool, sqlx::Error> {
+    //后台手动上传的视频优先处理,没有启用视频采集时也处理
+    if let Some((music_id, file)) = pending_uploads().await.into_iter().next() {
+        if current_state(music_id).await.is_some() {
+            println!("-->开始处理上传的视频:歌曲{}", music_id);
+            run(music_id, Source::Upload(file.clone())).await?;
+        }
+
+        //处理完成、失败,或者歌曲已经不存在时都删除上传的文件(程序中途被关闭时文件还在,下次启动重新处理)
+        if let Err(e) = tokio::fs::remove_file(&file).await
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            eprintln!("-->删除上传的视频失败:{} {}", file.display(), e);
+
+            //删除不掉时不能马上再处理,否则会一直重复转码
+            return Ok(false);
+        }
+        return Ok(true);
+    }
     if !collect_service::is_video_enabled() {
         return Ok(false);
     }
@@ -137,30 +202,37 @@ async fn next() -> Result<bool, sqlx::Error> {
         return Ok(false);
     };
     let video_id = next.extra.unwrap_or_default();
-    let work_dir = PathBuf::from(&application::ARGS.data_dir).join("temp").join("video").join(next.id.to_string());
-    let start = std::time::Instant::now();
     println!("-->开始采集视频:歌曲{} {}", next.id, video_id);
-    PROCESSING.store(next.id, Ordering::Relaxed);
-    let result = process(next.id, &video_id, &work_dir).await;
+    run(next.id, Source::Platform(video_id)).await?;
+    Ok(true)
+}
+
+/// 处理一首歌曲的视频,并保存处理结果
+async fn run(music_id: i64, source: Source) -> Result<(), sqlx::Error> {
+    let work_dir = PathBuf::from(&application::ARGS.data_dir).join("temp").join("video").join(music_id.to_string());
+    let start = std::time::Instant::now();
+    PROCESSING.store(music_id, Ordering::Relaxed);
+    let result = process(music_id, &source, &work_dir).await;
     PROCESSING.store(0, Ordering::Relaxed);
     let _ = tokio::fs::remove_dir_all(&work_dir).await;
+    let mut ctx = lib_db::get_context();
     let now = time_util::current_millis();
     match result {
         Ok(state) => {
-            println!("-->视频处理完成:歌曲{} 状态{} 耗时{}秒", next.id, state, start.elapsed().as_secs());
-            music_dao::set_video_state(&mut ctx, next.id, state, now).await?;
+            println!("-->视频处理完成:歌曲{} 状态{} 耗时{}秒", music_id, state, start.elapsed().as_secs());
+            music_dao::set_video_state(&mut ctx, music_id, state, now).await?;
         }
         Err(e) => {
-            eprintln!("-->视频采集失败:歌曲{} {}", next.id, e);
+            eprintln!("-->视频处理失败:歌曲{} {}", music_id, e);
 
             //处理过程中被后台删除了视频时,不改状态
-            if current_state(next.id).await != Some(VIDEO_DELETED) {
-                music_video_dao::delete_by_music(&mut ctx, next.id).await?;
-                music_dao::set_video_state(&mut ctx, next.id, VIDEO_FAIL, now).await?;
+            if current_state(music_id).await != Some(VIDEO_DELETED) {
+                music_video_dao::delete_by_music(&mut ctx, music_id).await?;
+                music_dao::set_video_state(&mut ctx, music_id, VIDEO_FAIL, now).await?;
             }
         }
     }
-    Ok(true)
+    Ok(())
 }
 
 /// 歌曲当前的视频状态,歌曲不存在或被删除时为None
@@ -171,17 +243,25 @@ async fn current_state(music_id: i64) -> Option<i64> {
 }
 
 /// 处理一首歌曲的视频,返回处理后的视频状态
-async fn process(music_id: i64, video_id: &str, work_dir: &Path) -> Result<i64, String> {
-    if video_id.is_empty() || !video_id.chars().all(|it| it.is_ascii_alphanumeric() || it == '_' || it == '-') {
-        return Err("采集参数不正确".to_string());
-    }
+async fn process(music_id: i64, source: &Source, work_dir: &Path) -> Result<i64, String> {
     tokio::fs::create_dir_all(work_dir).await.map_err(|e| e.to_string())?;
+    let (source, is_upload) = match source {
+        Source::Platform(video_id) => {
+            if video_id.is_empty() || !video_id.chars().all(|it| it.is_ascii_alphanumeric() || it == '_' || it == '-') {
+                return Err("采集参数不正确".to_string());
+            }
 
-    //1.等采集服务采集完成后下载
-    wait_collected(video_id).await?;
-    let source = work_dir.join("source.mp4");
-    let url = format!("{}/d/video?videoId={}&type=raw", collect_service::api_url(), video_id);
-    collect_task::download(&url, &source, MAX_SIZE).await?;
+            //1.等采集服务采集完成后下载
+            wait_collected(video_id).await?;
+            let source = work_dir.join("source.mp4");
+            let url = format!("{}/d/video?videoId={}&type=raw", collect_service::api_url(), video_id);
+            collect_task::download(&url, &source, MAX_SIZE).await?;
+            (source, false)
+        }
+
+        //后台手动上传的直接使用上传的文件
+        Source::Upload(file) => (file.clone(), true),
+    };
 
     //2.读取视频信息,判断是不是只有一张图片
     let info = video_util::probe(&source).await?;
@@ -195,7 +275,9 @@ async fn process(music_id: i64, video_id: &str, work_dir: &Path) -> Result<i64, 
         info.bit_rate,
         info.audio_codec.as_deref().unwrap_or("无")
     );
-    if video_util::is_static(&source).await? {
+
+    //手动上传的视频是管理员确认过的,不判断是不是只有一张图片
+    if !is_upload && video_util::is_static(&source).await? {
         return Ok(VIDEO_STATIC);
     }
 

@@ -3,7 +3,7 @@
 use crate::dao::{user_dao, user_login_dao};
 use crate::service::vip_service::{self, VipVo};
 use crate::service::{config_service, dfs_service, email_service, user_service};
-use crate::util::{image_util, pwd_util, request_util, time_util};
+use crate::util::{ffmpeg_util, image_util, pwd_util, request_util, time_util};
 use crate::web::biz_error::BizError;
 use crate::web::filter::user_auth::{self, LoginUser};
 use crate::web::form;
@@ -33,8 +33,11 @@ pub struct LoginResult {
 pub struct UserInfo {
     pub id: i64,
 
-    // 邮箱,临时会员为空
+    // 邮箱,临时会员、只有用户名的会员为空
     pub email: Option<String>,
+
+    // 用户名(后台设置,可以代替邮箱登录),没有时为空
+    pub name: Option<String>,
 
     // 昵称
     pub nick: Option<String>,
@@ -59,6 +62,7 @@ async fn user_info(id: i64) -> Result<UserInfo, BizError> {
     Ok(UserInfo {
         vip: vip_service::vo(&user),
         id: user.id,
+        name: user.name,
         nick: user.nick,
         logo: dfs_service::file_url(user.logo.as_deref()),
         is_temp: user.tempFlag == 1,
@@ -100,28 +104,30 @@ pub async fn temp_login(form: form::Device, headers: &HeaderMap, addr: RemoteAdd
     })
 }
 
-/// 邮箱登录
+/// 用邮箱或者用户名登录
 #[POST("/api/user/login")]
 pub async fn login(form: form::UserLogin, headers: &HeaderMap, addr: RemoteAddr) -> Result<LoginResult, BizError> {
     if let Err(e) = form.validate() {
         return Err(BizError::fields(e));
     }
     let ip = request_util::get_ip(headers, &addr);
-    crate::web::controller::admin::login::check_fail_limit(&form.email, &ip)?;
+    //失败次数按小写的账号统计
+    let account = form.account.trim().to_lowercase();
+    crate::web::controller::admin::login::check_fail_limit(&account, &ip)?;
     let mut ctx = db::begin().await?;
-    let user = user_dao::select_by_email(&mut ctx, form.email.clone())
+    let user = user_service::select_by_account(&mut ctx, &account)
         .await?
         .filter(|it| it.tempFlag == 0 && it.state != 2);
     let hash = user.as_ref().and_then(|it| it.pwd.clone()).unwrap_or_default();
     let is_ok = !hash.is_empty() && pwd_util::verify(&form.pwd, &hash).await;
     let Some(user) = user.filter(|_| is_ok) else {
-        crate::web::controller::admin::login::add_fail(&form.email, &ip);
-        return Err(biz_error!("邮箱或密码不正确"));
+        crate::web::controller::admin::login::add_fail(&account, &ip);
+        return Err(biz_error!("账号或密码不正确"));
     };
     if user.state != 1 {
         return Err(BizError::forbidden_msg("该账号已被禁用"));
     }
-    crate::web::controller::admin::login::clear_fail(&form.email);
+    crate::web::controller::admin::login::clear_fail(&account);
     let token = user_service::add_login(&mut ctx, user.id, form.device_id, form.client_flag, form.client_version, ip).await?;
     ctx.commit().await?;
     Ok(LoginResult {
@@ -174,17 +180,33 @@ pub async fn reset_pwd(form: form::ResetPwd) -> Result<(), BizError> {
     Ok(())
 }
 
-/// 临时会员绑定邮箱,绑定后成为正式会员,歌单等数据都保留
+/// 绑定邮箱
+/// - 临时会员:绑定后成为正式会员,歌单等数据都保留,pwd是新的登录密码
+/// - 只有用户名的会员(后台创建的):pwd是当前的登录密码,用来确认身份,密码不变
 #[POST("/api/user/bind_email")]
 pub async fn bind_email(login: Ext<LoginUser>, form: form::BindEmail) -> Result<UserInfo, BizError> {
-    if !login.is_temp {
-        return Err(biz_error!("已经绑定过邮箱"));
-    }
     if let Err(e) = form.validate() {
         return Err(BizError::fields(e));
     }
-    let pwd = pwd_util::hash(&form.pwd).await;
     let mut ctx = db::begin().await?;
+    if !login.is_temp {
+        let user = user_dao::select_one(&mut ctx, login.id).await?;
+        if user.email.is_some() {
+            return Err(biz_error!("已经绑定过邮箱"));
+        }
+        let hash = user.pwd.unwrap_or_default();
+        if hash.is_empty() || !pwd_util::verify(&form.pwd, &hash).await {
+            return Err(BizError::field("pwd", "密码不正确"));
+        }
+        email_service::verify_code(&mut ctx, &form.email, email_service::TYPE_BIND_EMAIL, &form.code).await?;
+        if user_dao::count_by_email(&mut ctx, form.email.clone(), login.id).await? > 0 {
+            return Err(BizError::field("email", "该邮箱已经被其他账号使用"));
+        }
+        user_dao::set_email(&mut ctx, login.id, form.email).await?;
+        ctx.commit().await?;
+        return user_info(login.id).await;
+    }
+    let pwd = pwd_util::hash(&form.pwd).await;
     email_service::verify_code(&mut ctx, &form.email, email_service::TYPE_BIND_EMAIL, &form.code).await?;
     if user_dao::count_by_email(&mut ctx, form.email.clone(), login.id).await? > 0 {
         return Err(BizError::field("email", "该邮箱已经被其他账号使用"));
@@ -226,16 +248,21 @@ pub async fn avatar(login: Ext<LoginUser>, form: AvatarUpload) -> Result<Option<
     Ok(dfs_service::file_url(Some(&path)))
 }
 
-/// 上传图片到DairoDFS,返回存储路径
+/// 上传图片(头像、歌单封面、歌曲封面)到DairoDFS,返回存储路径
+/// 不限制上传的图片大小,上传后居中裁切成正方形并缩小到800x800,转换成JPG
 pub async fn upload_image(data: Vec<u8>) -> Result<String, BizError> {
-    let Some(ext) = image_util::image_ext(&data) else {
+    if image_util::image_ext(&data).is_none() {
         return Err(biz_error!("只支持JPG、PNG、WEBP格式的图片"));
-    };
-    if data.len() > 10 * 1024 * 1024 {
-        return Err(biz_error!("图片不能超过10MB"));
     }
+    let data = match ffmpeg_util::crop_image_data(data, ffmpeg_util::LOGO_SIZE, ffmpeg_util::LOGO_SIZE).await {
+        Ok(it) => it,
+        Err(e) => {
+            eprintln!("-->图片处理失败: {}", e);
+            return Err(biz_error!("图片处理失败,请换一张图片再试"));
+        }
+    };
     let name = Alphanumeric.sample_string(&mut rand::rng(), 16);
-    let path = format!("/image/logo/{}/{}.{}", time_util::current_year(), name, ext);
+    let path = format!("/image/logo/{}/{}.jpg", time_util::current_year(), name);
     if let Err(e) = dfs_service::upload(data, &path, "").await {
         eprintln!("-->图片上传失败: {}", e);
         return Err(biz_error!("图片上传失败,请稍后再试"));

@@ -19,8 +19,13 @@
         <form id="form" class="app-form" action="/admin/api/user/edit" onsubmit="onSubmitClick();return false;">
             <input type="hidden" name="id">
             <div class="mb-3">
-                <label class="form-label">邮箱</label>
+                <label class="form-label">邮箱 <span class="text-secondary small">(邮箱和用户名至少填写一个)</span></label>
                 <input name="email" class="form-control" autocomplete="off" style="max-width: 320px">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">用户名 <span class="text-secondary small">(可以代替邮箱登录)</span></label>
+                <input name="name" class="form-control" autocomplete="off" maxlength="32" placeholder="3~32位的字母、数字、下划线" style="max-width: 320px">
+                <div class="form-text">不区分大小写。没有邮箱的会员忘记密码时只能在这里重新设置密码</div>
             </div>
             <div class="mb-3">
                 <label class="form-label">密码</label>

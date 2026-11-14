@@ -12,7 +12,10 @@ use std::time::Duration;
 struct Assets;
 
 /// 数据库版本号
-const VERSION: i32 = 9;
+/// 注意:升级时新增的字段(ALTER TABLE ADD COLUMN)是加在表的最后,建表语句里也必须加在最后,保持顺序一致。
+/// dsl里固定的"select *"语句是按字段的位置读取的,顺序不一致时升级上来的数据库会读错字段。
+/// (music表的auditState是例外:升级上来的数据库在最后,建表语句里在中间,所以music表不能写固定的"select *"语句)
+const VERSION: i32 = 10;
 
 /// 数据库文件名
 pub const DB_FILE_NAME: &str = "dairo-music.sqlite";
@@ -134,6 +137,12 @@ WHERE EXISTS (SELECT 1 FROM admin_menu_bar WHERE url = '/admin/music_list.html')
   AND NOT EXISTS (SELECT 1 FROM admin_menu_bar m WHERE m.url = it.url);
 INSERT OR IGNORE INTO admin_permission (roleId, menuId)
 SELECT 1, id FROM admin_menu_bar WHERE url IN ('/admin/music_correct_list.html', '/admin/music_complaint_list.html');
+";
+
+/// 版本9升级到版本10:会员增加用户名(可以代替邮箱登录,不能重复)
+const UPGRADE_V10: &str = "
+ALTER TABLE user ADD COLUMN name VARCHAR(32);
+CREATE UNIQUE INDEX idx_user_name ON user (name);
 ";
 
 /// 全新安装时的初始数据(菜单、超级管理员角色)
@@ -269,6 +278,11 @@ async fn upgrade(with_init_data: bool) -> Result<(), Box<dyn Error>> {
         if version < 9 {
             let mut tx = (&mut *conn).begin().await?;
             sqlx::raw_sql(UPGRADE_V9).execute(&mut *tx).await?;
+            tx.commit().await?;
+        }
+        if version < 10 {
+            let mut tx = (&mut *conn).begin().await?;
+            sqlx::raw_sql(UPGRADE_V10).execute(&mut *tx).await?;
             tx.commit().await?;
         }
     }

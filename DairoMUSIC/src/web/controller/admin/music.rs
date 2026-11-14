@@ -11,10 +11,12 @@ use crate::util::time_util;
 use crate::web::biz_error::BizError;
 use crate::web::form;
 use crate::web::model::{non_empty, PageData, PageForm};
-use crate::{biz_error, db, util};
-use hyperoute_core::Query;
-use hyperoute_macro::{GET, POST};
+use crate::{biz_error, biz_errorf, db};
 use rand::distr::{Alphanumeric, SampleString};
+use tokio::io::AsyncWriteExt;
+use crate::web::controller::api::music_upload;
+use hyperoute_core::{BodyStream, Query};
+use hyperoute_macro::{GET, POST};
 use serde::Serialize;
 use validator::Validate;
 
@@ -153,10 +155,72 @@ pub async fn videos(id: i64) -> Result<Vec<MusicVideoItem>, BizError> {
 /// 删除歌曲的视频(误判为有视频时使用),以后也不再自动采集
 #[POST("/admin/api/music/delete_video")]
 pub async fn delete_video(id: i64) -> Result<(), BizError> {
+    //还没有处理的上传视频也一起删除
+    video_task::remove_upload(id).await;
     let mut ctx = db::begin().await?;
     music_video_dao::delete_by_music(&mut ctx, id).await?;
     music_dao::set_video_state(&mut ctx, id, video_task::VIDEO_DELETED, time_util::current_millis()).await?;
     ctx.commit().await?;
+    Ok(())
+}
+
+/// 手动上传歌曲的视频,请求体直接放文件内容;所有歌曲都可以上传,已经有视频时替换原来的
+/// 上传后由后台转码(和采集的视频一样:原画、流畅版)、上传到DairoDFS,完成之前视频状态为"处理中"
+/// - id 歌曲ID
+/// - name 文件名(带扩展名)
+#[POST("/admin/api/music/upload_video")]
+pub async fn upload_video(id: i64, name: String, mut body: BodyStream) -> Result<(), BizError> {
+    let ext = name.rsplit_once('.').map(|(_, ext)| ext.to_lowercase()).unwrap_or_default();
+    if !video_task::UPLOAD_EXTS.contains(&ext.as_str()) {
+        return Err(biz_errorf!("只支持这些格式的视频: {}", video_task::UPLOAD_EXTS.join("、")));
+    }
+    let mut ctx = lib_db::get_context();
+    if !music_dao::select_one(&mut ctx, id).await.is_ok_and(|it| it.deleteFlag == 0) {
+        return Err(biz_error!("歌曲不存在"));
+    }
+    if video_task::processing_id() == id {
+        return Err(biz_error!("这首歌的视频正在处理中,请稍后再试"));
+    }
+
+    //先保存成临时文件,上传完成后再改名,后台任务不会处理还没有上传完的文件
+    let dir = video_task::upload_dir();
+    tokio::fs::create_dir_all(&dir).await?;
+    let temp_path = dir.join(format!("{}.{}.uploading", id, Alphanumeric.sample_string(&mut rand::rng(), 8)));
+    let mut file = tokio::fs::File::create(&temp_path).await?;
+    let mut size = 0u64;
+    while let Some(chunk) = body.next_chunk().await {
+        let error = match chunk {
+            Ok(chunk) => {
+                size += chunk.len() as u64;
+                if size > video_task::UPLOAD_MAX_SIZE {
+                    Some(biz_error!("视频不能超过20GB"))
+                } else {
+                    file.write_all(&chunk).await.err().map(BizError::from)
+                }
+            }
+            Err(e) => Some(biz_errorf!("上传中断: {}", e)),
+        };
+        if let Some(error) = error {
+            drop(file);
+            let _ = tokio::fs::remove_file(&temp_path).await;
+            return Err(error);
+        }
+    }
+    file.flush().await?;
+    drop(file);
+    if size == 0 || video_task::processing_id() == id {
+        let _ = tokio::fs::remove_file(&temp_path).await;
+        return Err(biz_error!(if size == 0 { "文件内容为空" } else { "这首歌的视频正在处理中,请稍后再试" }));
+    }
+
+    //同一首歌只保留最后上传的
+    video_task::remove_upload(id).await;
+    tokio::fs::rename(&temp_path, dir.join(format!("{}.{}", id, ext))).await?;
+    let mut ctx = db::begin().await?;
+    music_video_dao::delete_by_music(&mut ctx, id).await?;
+    music_dao::set_video_state(&mut ctx, id, video_task::VIDEO_COLLECTING, time_util::current_millis()).await?;
+    ctx.commit().await?;
+    video_task::wake();
     Ok(())
 }
 
@@ -179,6 +243,9 @@ pub async fn recollect_video(id: i64) -> Result<(), BizError> {
     music_video_dao::delete_by_music(&mut ctx, id).await?;
     music_dao::set_video_state(&mut ctx, id, video_task::VIDEO_COLLECTING, time_util::current_millis()).await?;
     ctx.commit().await?;
+
+    //手动上传了但还没有处理的视频不要了
+    video_task::remove_upload(id).await;
     video_task::wake();
     Ok(())
 }
@@ -314,29 +381,22 @@ pub struct LogoUpload {
 }
 
 /// 上传歌曲封面(保存到DairoDFS)
+/// 不限制上传的图片大小,上传后居中裁切成正方形并缩小到800x800,转换成JPG
 #[POST("/admin/api/music/upload_logo")]
 pub async fn upload_logo(form: LogoUpload) -> Result<Option<String>, BizError> {
-    let Some(ext) = util::image_util::image_ext(&form.file) else {
-        return Err(biz_error!("只支持JPG、PNG、WEBP格式的图片"));
-    };
-    if form.file.len() > 10 * 1024 * 1024 {
-        return Err(biz_error!("图片不能超过10MB"));
-    }
     let mut ctx = lib_db::get_context();
     if music_dao::select_one(&mut ctx, form.id).await.is_err() {
         return Err(biz_error!("歌曲不存在"));
     }
-    let path = logo_path(ext);
-    if let Err(e) = dfs_service::upload(form.file, &path, "").await {
-        return Err(biz_error!(format!("封面上传失败: {}", e)));
-    }
+    let path = crate::web::controller::api::user::upload_image(form.file).await?;
     music_dao::update_logo(&mut ctx, form.id, Some(path.clone())).await?;
     Ok(dfs_service::file_url(Some(&path)))
 }
 
-/// 生成封面的存储路径 /image/logo/{年}/{随机名}.{扩展名}
-fn logo_path(ext: &str) -> String {
-    let year = time_util::current_year();
-    let name = Alphanumeric.sample_string(&mut rand::rng(), 16);
-    format!("/image/logo/{}/{}.{}", year, name, ext)
+/// 上传歌曲文件,请求体直接放文件内容,返回歌曲ID
+/// 和APP上传歌曲一样由后台转码、上传到DairoDFS,完成之前歌曲的状态为"采集中";曲库里已经有相同的文件时自动合并
+/// - name 文件名(带扩展名),去掉扩展名后作为歌名
+#[POST("/admin/api/music/upload")]
+pub async fn upload(name: String, body: BodyStream) -> Result<i64, BizError> {
+    music_upload::save_upload(name, body, music_upload::SOURCE_ADMIN_UPLOAD).await
 }

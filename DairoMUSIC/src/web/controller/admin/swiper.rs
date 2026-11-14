@@ -2,7 +2,7 @@
 
 use crate::dao::swiper_dao::Swiper;
 use crate::dao::{music_dao, swiper_dao, user_favorite_dao};
-use crate::service::{config_service, dfs_service};
+use crate::service::dfs_service;
 use crate::util::{ffmpeg_util, image_util, time_util};
 use crate::web::biz_error::BizError;
 use crate::web::form;
@@ -130,16 +130,8 @@ pub async fn upload(form: ImageUpload) -> Result<ImageResult, BizError> {
         return Err(biz_error!("只支持JPG、PNG、WEBP格式的图片"));
     }
 
-    //ffmpeg处理的是文件,先保存成临时文件
     let name = Alphanumeric.sample_string(&mut rand::rng(), 16);
-    let temp_dir = config_service::data_dir().join("temp");
-    tokio::fs::create_dir_all(&temp_dir).await?;
-    let temp_path = temp_dir.join(format!("swiper-{}", name));
-    tokio::fs::write(&temp_path, &form.file).await?;
-    drop(form);
-    let result = ffmpeg_util::crop_image(&temp_path, IMAGE_WIDTH, IMAGE_HEIGHT).await;
-    let _ = tokio::fs::remove_file(&temp_path).await;
-    let data = match result {
+    let data = match ffmpeg_util::crop_image_data(form.file, IMAGE_WIDTH, IMAGE_HEIGHT).await {
         Ok(it) => it,
         Err(e) => {
             eprintln!("-->轮播图片处理失败: {}", e);

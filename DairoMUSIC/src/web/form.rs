@@ -137,9 +137,14 @@ pub struct UserEdit {
     #[serde(default)]
     pub id: i64,
 
-    // 邮箱
-    #[validate(email(message = "邮箱格式不正确"), length(max = 128, message = "邮箱长度不能超过128位"))]
+    // 邮箱,和用户名至少填写一个
+    #[serde(default)]
+    #[validate(length(max = 128, message = "邮箱长度不能超过128位"))]
     pub email: String,
+
+    // 用户名(3到32位的字母、数字、下划线,不区分大小写),可以代替邮箱登录
+    #[serde(default)]
+    pub name: String,
 
     // 密码,修改时为空表示不修改
     #[serde(default)]
@@ -383,12 +388,14 @@ pub struct Device {
     pub client_version: i64,
 }
 
-/// 客户端邮箱登录
+/// 客户端登录
 #[derive(Deserialize, Debug, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct UserLogin {
-    #[validate(length(min = 1, message = "请输入邮箱"))]
-    pub email: String,
+    // 邮箱或者用户名(老版本的参数名是email)
+    #[serde(alias = "email")]
+    #[validate(length(min = 1, max = 128, message = "请输入邮箱或用户名"))]
+    pub account: String,
 
     #[validate(length(min = 1, message = "请输入密码"))]
     pub pwd: String,

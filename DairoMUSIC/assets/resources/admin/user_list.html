@@ -11,6 +11,7 @@
         <form id="search" class="app-toolbar">
             <input name="id" class="form-control" placeholder="ID" type="number" style="width: 110px">
             <input name="email" class="form-control" placeholder="邮箱" style="width: 200px">
+            <input name="name" class="form-control" placeholder="用户名" style="width: 150px">
             <select name="state" class="form-select" style="width: 120px">
                 <option value="">全部状态</option>
                 <option value="1" selected>有效</option>
@@ -44,7 +45,8 @@
         columns: [
             {title: "", render: it => logoHtml(it.logo, 36)},
             {title: "ID", data: "id", sortKey: "id"},
-            {title: "邮箱", data: "email", sortKey: "email"},
+            {title: "邮箱", render: it => it.email ? escapeHtml(it.email) : `<span class="text-secondary">没有</span>`, sortKey: "email"},
+            {title: "用户名", render: it => it.name ? escapeHtml(it.name) : "", sortKey: "name"},
             {title: "昵称", render: it => it.nick ? escapeHtml(it.nick) : `<span class="text-secondary">未设置</span>`},
             {title: "状态", render: it => USER_STATE[it.state] || "", sortKey: "state"},
             {title: "VIP", render: it => vipHtml(it), sortKey: "vipTime", className: "text-nowrap"},

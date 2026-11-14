@@ -15,8 +15,11 @@ use rand::distr::{Alphanumeric, SampleString};
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 
+/// 歌曲来源:后台上传
+pub const SOURCE_ADMIN_UPLOAD: i64 = 0;
+
 /// 歌曲来源:会员上传
-const SOURCE_USER_UPLOAD: i64 = 1;
+pub const SOURCE_USER_UPLOAD: i64 = 1;
 
 /// 上传文件的最大大小
 const MAX_SIZE: u64 = 500 * 1024 * 1024;
@@ -44,10 +47,17 @@ pub async fn by_md5(md5: String) -> Result<i64, BizError> {
 /// 上传后由后台转码、上传到DairoDFS,完成之前歌曲的状态为"采集中"
 /// - name 文件名(带扩展名),去掉扩展名后作为歌名
 #[POST("/api/music/upload")]
-pub async fn upload(login: Ext<LoginUser>, name: String, mut body: BodyStream) -> Result<i64, BizError> {
+pub async fn upload(login: Ext<LoginUser>, name: String, body: BodyStream) -> Result<i64, BizError> {
     if login.is_test {
         return Err(BizError::forbidden());
     }
+    save_upload(name, body, SOURCE_USER_UPLOAD).await
+}
+
+/// 保存上传的歌曲文件,添加歌曲和处理任务,返回歌曲ID(APP和后台上传歌曲共用)
+/// - name 文件名(带扩展名),去掉扩展名后作为歌名
+/// - source_type 歌曲来源 0:后台上传 1:会员上传
+pub async fn save_upload(name: String, mut body: BodyStream, source_type: i64) -> Result<i64, BizError> {
     let name = name.trim().to_string();
     let Some((title, ext)) = name.rsplit_once('.') else {
         return Err(BizError::field("name", "文件名需要带扩展名"));
@@ -97,7 +107,7 @@ pub async fn upload(login: Ext<LoginUser>, name: String, mut body: BodyStream) -
     let mut ctx = db::begin().await?;
     let music = Music {
         name: Some(title.to_string()),
-        sourceType: SOURCE_USER_UPLOAD,
+        sourceType: source_type,
         date: now,
         ..Default::default()
     };

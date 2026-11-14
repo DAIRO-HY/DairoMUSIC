@@ -54,7 +54,7 @@
 ```
 会员信息:
 ```json
-{"id": 1, "email": "邮箱,临时会员为null", "nick": "昵称", "logo": "头像地址", "isTemp": false, "isFriend": false,
+{"id": 1, "email": "邮箱,临时会员、只有用户名的会员为null", "name": "用户名,没有时为null", "nick": "昵称", "logo": "头像地址", "isTemp": false, "isFriend": false,
  "vip": {"enable": true, "isVip": true, "forever": false, "expireTime": 1798084286000}}
 ```
 `isFriend` 为信任会员(后台设置):纠错直接生效,可以查看、修改歌曲的审核状态,见下面的"信任会员"。`vip` 见下面的"VIP"。
@@ -62,13 +62,13 @@
 | 接口 | 需要登录 | 参数 | 说明 |
 |---|---|---|---|
 | `POST /api/user/temp_login` | 否 | 设备信息 | 免注册使用,每台设备对应一个临时会员,同一台设备再次调用时找回同一个会员。关闭注册时不能创建新的临时会员 |
-| `POST /api/user/login` | 否 | `email`、`pwd`、设备信息 | 邮箱登录。连续输错密码会被限制10分钟 |
+| `POST /api/user/login` | 否 | `account`、`pwd`、设备信息 | 用邮箱或者用户名登录(`account` 里有 `@` 的按邮箱查找,否则按用户名,用户名不区分大小写)。老的参数名 `email` 仍然可以使用。连续输错密码会被限制10分钟 |
 | `POST /api/user/register` | 否 | `email`、`pwd`(6~32位)、`code`、设备信息 | 注册,注册后直接登录 |
 | `POST /api/user/reset_pwd` | 否 | `email`、`code`、`pwd` | 重置密码,所有设备需要重新登录 |
-| `POST /api/user/bind_email` | 是 | `email`、`code`、`pwd` | 临时会员绑定邮箱成为正式会员,歌单都保留。返回会员信息 |
+| `POST /api/user/bind_email` | 是 | `email`、`code`、`pwd` | 绑定邮箱,返回会员信息。临时会员(`isTemp` 为 true):绑定后成为正式会员,歌单都保留,`pwd` 是新的登录密码。只有用户名的会员(`isTemp` 为 false 并且 `email` 为 null):`pwd` 是当前的登录密码,用来确认身份,密码不变 |
 | `GET /api/user/info` | 是 | | 会员信息 |
 | `POST /api/user/edit` | 是 | `nick` | 修改昵称 |
-| `POST /api/user/avatar` | 是 | multipart:`file` | 上传头像(JPG/PNG/WEBP,10MB以内),返回头像地址 |
+| `POST /api/user/avatar` | 是 | multipart:`file` | 上传头像(JPG/PNG/WEBP),返回头像地址。不限制图片大小,客户端不需要裁切、压缩,服务端居中裁切成正方形并缩小到800x800 |
 | `POST /api/user/modify_pwd` | 是 | `oldPwd`、`pwd` | 修改密码,其他设备需要重新登录 |
 | `POST /api/user/unregister` | 是 | `pwd` | 注销账号,注销后邮箱可以重新注册 |
 | `DELETE /api/user/logout` | 是 | | 退出登录 |
@@ -230,7 +230,7 @@
 | `GET /api/favorite/detail` | `id` | 歌单详情 |
 | `POST /api/favorite/add` | `name` | 新建歌单,返回歌单ID |
 | `POST /api/favorite/edit` | `id`、`name`、`description` | 修改歌单 |
-| `POST /api/favorite/logo` | multipart:`id`、`file` | 上传封面,返回封面地址 |
+| `POST /api/favorite/logo` | multipart:`id`、`file` | 上传封面(JPG/PNG/WEBP),返回封面地址。不限制图片大小,客户端不需要裁切、压缩,服务端居中裁切成正方形并缩小到800x800 |
 | `DELETE /api/favorite/delete` | `id` | 删除歌单。首页(推荐分组、轮播)正在使用的歌单不会真正删除,只是不再属于这个会员(从"我的歌单"里消失,首页继续显示) |
 | `POST /api/favorite/sort` | `ids`(排好序的歌单ID,逗号分隔) | 歌单排序 |
 | `GET /api/favorite/musics` | `id` | 歌单里的歌曲,最近添加的在前面 |

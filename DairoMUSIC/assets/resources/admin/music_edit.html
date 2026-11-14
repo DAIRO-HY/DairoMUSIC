@@ -14,6 +14,7 @@
                 <div id="logo" class="mb-3"></div>
                 <input id="logoFile" type="file" accept="image/jpeg,image/png,image/webp" class="d-none" onchange="onLogoChange(this)">
                 <button type="button" class="btn btn-outline-primary btn-sm" onclick="$('#logoFile').click()"><i class="bi bi-image me-1"></i>更换封面</button>
+                <div class="text-secondary small mt-1">不限制图片大小,上传后自动居中裁切成正方形</div>
                 <hr>
                 <dl class="row small text-start mb-0" id="info"></dl>
             </div>
@@ -67,10 +68,17 @@
             <div id="videoCard" class="app-card d-none">
                 <div class="app-card-title d-flex align-items-center flex-wrap gap-2">视频 <span id="videoState"></span>
                     <span class="ms-auto"></span>
+                    <input id="videoFile" type="file" accept=".mp4,.mov,.m4v,.mkv,.webm,.avi,.flv,.ts,video/*" class="d-none" onchange="onVideoChange(this)">
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="$('#videoFile').click()"><i class="bi bi-upload me-1"></i>上传视频</button>
                     <button type="button" class="btn btn-outline-primary btn-sm" onclick="onRecollectVideoClick()"><i class="bi bi-arrow-repeat me-1"></i>重新采集</button>
                     <button type="button" class="btn btn-outline-danger btn-sm" onclick="onDeleteVideoClick()"><i class="bi bi-trash me-1"></i>删除视频</button>
                 </div>
+                <div id="videoUpload" class="d-none mb-3">
+                    <div class="small mb-1"><span id="videoUploadText"></span> <a href="javascript:void(0)" class="ms-2" onclick="cancelVideoUpload()">取消</a></div>
+                    <div class="progress" style="height: 6px"><div id="videoUploadBar" class="progress-bar" style="width: 0"></div></div>
+                </div>
                 <div id="videos"></div>
+                <div class="text-secondary small mt-2">上传的视频由后台转码后才能播放(原画,以及高于480p或25fps时的流畅版),已经有视频时会替换原来的</div>
             </div>
             <div id="collectCard" class="app-card d-none">
                 <div class="app-card-title d-flex align-items-center">采集信息
@@ -221,8 +229,8 @@
     }
 
     const VIDEO_STATES = {
-        0: badge("未采集", "secondary"), 1: badge("采集中", "info"), 2: badge("有视频", "success"),
-        3: badge("没有视频(只有图片)", "secondary"), 4: badge("已删除", "warning"), 5: badge("采集失败", "danger")
+        0: badge("未采集", "secondary"), 1: badge("采集、处理中", "info"), 2: badge("有视频", "success"),
+        3: badge("没有视频(只有图片)", "secondary"), 4: badge("已删除", "warning"), 5: badge("采集、处理失败", "danger")
     }
 
     /**
@@ -251,6 +259,47 @@
 
     function reloadVideos() {
         $.ajaxByData("/admin/api/music/detail").add("id", id).hide().success(data => loadVideos(data.videoState)).get()
+    }
+
+    /** 正在上传视频的请求 */
+    let videoXhr = null
+
+    /**
+     * 上传视频:文件内容直接放在请求体里(视频可能很大),显示上传进度
+     */
+    function onVideoChange(input) {
+        const file = input.files[0]
+        input.value = ""
+        if (!file || videoXhr) {
+            return
+        }
+        const xhr = new XMLHttpRequest()
+        videoXhr = xhr
+        $("#videoUploadText").text(`正在上传 ${file.name} 0%`)
+        $("#videoUploadBar").css("width", "0")
+        $("#videoUpload").removeClass("d-none")
+        xhr.upload.onprogress = e => {
+            const percent = e.total ? Math.floor(e.loaded * 100 / e.total) : 0
+            $("#videoUploadText").text(`正在上传 ${file.name} ${percent}% (${formatSize(e.loaded)} / ${formatSize(e.total)})`)
+            $("#videoUploadBar").css("width", percent + "%")
+        }
+        xhr.onloadend = () => {
+            videoXhr = null
+            $("#videoUpload").addClass("d-none")
+            if (xhr.status === 200) {
+                reloadVideos()
+            } else if (xhr.status !== 0) {//0是取消了上传
+                alert(xhr.responseText || "上传失败")
+            }
+        }
+        xhr.open("POST", `/admin/api/music/upload_video?id=${id}&name=${encodeURIComponent(file.name)}`)
+        xhr.send(file)
+    }
+
+    function cancelVideoUpload() {
+        if (videoXhr) {
+            videoXhr.abort()
+        }
     }
 
     function onDeleteVideoClick() {

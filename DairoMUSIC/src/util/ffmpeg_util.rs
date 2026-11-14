@@ -230,3 +230,22 @@ pub async fn crop_image(source: &Path, width: u32, height: u32) -> Result<Vec<u8
     }
     Ok(data)
 }
+
+/// 封面、头像的分辨率:居中裁切成正方形,宽度超过这个值时缩小
+pub const LOGO_SIZE: u32 = 800;
+
+/// 把上传的图片居中裁切成指定的宽高比,并缩小到指定的宽度,转换成JPG(不限制上传的图片大小)
+/// - data 图片内容
+pub async fn crop_image_data(data: Vec<u8>, width: u32, height: u32) -> Result<Vec<u8>, String> {
+    use rand::distr::{Alphanumeric, SampleString};
+
+    //ffmpeg处理的是文件,先保存成临时文件
+    let temp_dir = crate::service::config_service::data_dir().join("temp");
+    tokio::fs::create_dir_all(&temp_dir).await.map_err(|e| e.to_string())?;
+    let temp_path = temp_dir.join(format!("image-{}", Alphanumeric.sample_string(&mut rand::rng(), 16)));
+    tokio::fs::write(&temp_path, &data).await.map_err(|e| e.to_string())?;
+    drop(data);
+    let result = crop_image(&temp_path, width, height).await;
+    let _ = tokio::fs::remove_file(&temp_path).await;
+    result
+}

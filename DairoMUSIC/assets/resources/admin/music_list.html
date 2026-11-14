@@ -20,7 +20,18 @@
                 <option value="0" selected>未删除</option>
                 <option value="1">已删除</option>
             </select>
+            <input id="musicFile" type="file" multiple accept=".mp3,.flac,.wav,.ape,.m4a,.aac,.ogg,.wma,audio/*" class="d-none" onchange="onMusicFileChange(this)">
+            <button type="button" class="btn btn-primary ms-auto" onclick="$('#musicFile').click()"><i class="bi bi-upload me-1"></i>上传歌曲</button>
         </form>
+        <div id="uploadBox" class="alert alert-light border d-none">
+            <div class="d-flex align-items-center mb-2">
+                <span class="fw-medium">上传歌曲</span>
+                <span id="uploadSummary" class="text-secondary small ms-2"></span>
+                <button type="button" class="btn-close ms-auto" title="关闭" onclick="closeUpload()"></button>
+            </div>
+            <div id="uploadList" style="max-height: 240px; overflow-y: auto"></div>
+            <div class="text-secondary small mt-2">可以一次选择多个文件(mp3、flac、wav、ape、m4a、aac、ogg、wma,每个500MB以内)。文件名去掉扩展名之后作为歌名,上传后由后台转码,曲库里已经有相同的文件时自动合并</div>
+        </div>
         <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
             <span class="text-secondary small">勾选的歌曲:</span>
             <button type="button" class="btn btn-outline-success btn-sm" onclick="onAuditClick(1)"><i class="bi bi-check-lg me-1"></i>审核通过</button>
@@ -113,6 +124,105 @@
             }
             table.load()
         }).post()
+    }
+
+    // ------------------------------ 上传歌曲 ------------------------------
+
+    /** 等待上传的文件 */
+    let uploadQueue = []
+
+    /** 这一批的文件数量、成功数量、失败数量 */
+    let uploadTotal = 0, uploadOk = 0, uploadFail = 0
+
+    /** 正在上传的请求,没有时为null */
+    let uploadXhr = null
+
+    function onMusicFileChange(input) {
+        const files = Array.from(input.files)
+        input.value = ""
+        if (files.length === 0) {
+            return
+        }
+        if (!uploadXhr) {
+            //上一批已经全部上传完,重新开始统计
+            uploadTotal = uploadOk = uploadFail = 0
+            $("#uploadList").empty()
+        }
+        files.forEach(file => {
+            const index = uploadTotal++
+            uploadQueue.push({file, index})
+            $("#uploadList").append(`<div class="d-flex align-items-center gap-2 small py-1 border-bottom">
+                <div class="text-truncate" style="flex: 1; min-width: 0" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
+                <div class="text-secondary text-nowrap">${formatSize(file.size)}</div>
+                <div id="uploadState${index}" class="text-nowrap text-secondary" style="width: 220px; overflow: hidden; text-overflow: ellipsis">等待上传</div>
+            </div>`)
+        })
+        $("#uploadBox").removeClass("d-none")
+        updateUploadSummary()
+        uploadNext()
+    }
+
+    function updateUploadSummary() {
+        $("#uploadSummary").text(`共${uploadTotal}个,成功${uploadOk}个${uploadFail > 0 ? `,失败${uploadFail}个` : ""}`)
+    }
+
+    /**
+     * 一个一个上传:文件内容直接放在请求体里
+     */
+    function uploadNext() {
+        if (uploadXhr) {
+            return
+        }
+        const item = uploadQueue.shift()
+        if (!item) {
+            if (uploadOk > 0) {
+                table.load()
+            }
+            return
+        }
+        const state = $(`#uploadState${item.index}`)
+        const xhr = new XMLHttpRequest()
+        uploadXhr = xhr
+        xhr.upload.onprogress = e => state.attr("class", "text-nowrap text-primary").text(`上传中 ${e.total ? Math.floor(e.loaded * 100 / e.total) : 0}%`)
+        xhr.onloadend = () => {
+            uploadXhr = null
+            if (xhr.status === 200) {
+                uploadOk++
+                state.attr("class", "text-nowrap text-success").text("上传成功,等待后台处理")
+            } else {
+                uploadFail++
+
+                //参数错误时返回的是JSON(code为2),取出里面的提示
+                let message = xhr.responseText || (xhr.status === 0 ? "已取消" : "上传失败")
+                try {
+                    const data = JSON.parse(message)
+                    message = Object.values(data.data || {}).flat().join(",") || data.msg || message
+                } catch (e) {
+                }
+                state.attr("class", "text-nowrap text-danger").attr("title", message).text(message)
+            }
+            updateUploadSummary()
+            uploadNext()
+        }
+        xhr.open("POST", `/admin/api/music/upload?name=${encodeURIComponent(item.file.name)}`)
+        xhr.send(item.file)
+    }
+
+    /** 关闭上传面板:还没有上传的不再上传,正在上传的取消 */
+    function closeUpload() {
+        const uploading = uploadXhr != null || uploadQueue.length > 0
+        const close = () => {
+            uploadQueue = []
+            if (uploadXhr) {
+                uploadXhr.abort()
+            }
+            $("#uploadBox").addClass("d-none")
+        }
+        if (uploading) {
+            confirmDo("还有文件没有上传完,确定要取消吗?", close)
+        } else {
+            close()
+        }
     }
 
     // ------------------------------ 试听 ------------------------------

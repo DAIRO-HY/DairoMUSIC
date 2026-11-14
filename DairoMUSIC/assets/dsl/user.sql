@@ -3,6 +3,7 @@
 -- @page
 -- @param id:i64?
 -- @param email:String? 邮箱(模糊匹配)
+-- @param name:String? 用户名(模糊匹配)
 -- @param state:i64?
 -- @return User
 select * from user where 1 = 1
@@ -11,6 +12,9 @@ and id = :id
 -- @end
 -- @if email != null
 and email like '%' || :email || '%'
+-- @end
+-- @if name != null
+and name like '%' || :name || '%'
 -- @end
 -- @if state != null
 and state = :state
@@ -27,13 +31,23 @@ select count(*) from user where email = :email and id != :id;
 
 -- ------------------------------
 
+-- 用户名是否已经被其他会员使用
+-- @name count_by_name
+-- @param name:String
+-- @param id:i64 排除的会员ID(新增时为0)
+-- @return i64
+select count(*) from user where name = :name and id != :id;
+
+-- ------------------------------
+
 -- 后台更新会员信息(不包括密码)
 -- @name update_by_admin
 -- @param id:i64
--- @param email:String
+-- @param email:String?
+-- @param name:String?
 -- @param state:i64
 -- @param friend_flag:i64
-update user set email = :email, state = :state, friendFlag = :friend_flag where id = :id;
+update user set email = :email, name = :name, state = :state, friendFlag = :friend_flag where id = :id;
 
 -- ------------------------------
 
@@ -59,6 +73,14 @@ update user set pwd = :pwd where id = :id;
 -- @param email:String
 -- @return User?
 select * from user where email = :email;
+
+-- ------------------------------
+
+-- 通过用户名获取会员
+-- @name select_by_name
+-- @param name:String 用户名(小写)
+-- @return User?
+select * from user where name = :name;
 
 -- ------------------------------
 
@@ -95,11 +117,19 @@ update user set email = :email, pwd = :pwd, tempFlag = 0 where id = :id;
 
 -- ------------------------------
 
--- 注销:状态改为2,邮箱和手机号加上后缀,之后可以用同一个邮箱重新注册
+-- 只有用户名的会员绑定邮箱(密码不变)
+-- @name set_email
+-- @param id:i64
+-- @param email:String
+update user set email = :email where id = :id;
+
+-- ------------------------------
+
+-- 注销:状态改为2,邮箱和手机号加上后缀,用户名清空,之后可以用同一个邮箱、用户名重新注册
 -- @name unregister
 -- @param id:i64
 -- @param suffix:String
-update user set state = 2,
+update user set state = 2, name = null,
                 email = case when email is null then null else email || :suffix end,
                 phone = case when phone is null then null else phone || :suffix end
 where id = :id;
