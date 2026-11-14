@@ -1,7 +1,7 @@
 //! 公开页面(分享页、下载页)用的接口,不需要登录
 
 use crate::dao::{app_version_dao, music_dao, music_file_dao};
-use crate::service::dfs_service;
+use crate::service::{dfs_service, vip_service};
 use crate::service::music_service::{self, MusicVo};
 use crate::web::biz_error::BizError;
 use hyperoute_macro::GET;
@@ -33,7 +33,7 @@ pub async fn music(id: i64) -> Result<MusicVo, BizError> {
         logo: dfs_service::file_url(music.logo.as_deref()),
         duration: music.duration,
         video_state: music.videoState,
-        files: music_service::file_vos(&files),
+        files: music_service::file_vos(&files, vip_service::is_guest_limited()),
         ..Default::default()
     })
 }

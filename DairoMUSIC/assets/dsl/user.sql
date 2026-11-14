@@ -37,6 +37,15 @@ update user set email = :email, state = :state, friendFlag = :friend_flag where 
 
 -- ------------------------------
 
+-- 修改VIP
+-- @name update_vip
+-- @param id:i64
+-- @param vip_time:i64 到期时间(毫秒),0:不是VIP
+-- @param vip_forever:i64 是否永久VIP
+update user set vipTime = :vip_time, vipForever = :vip_forever where id = :id;
+
+-- ------------------------------
+
 -- 修改密码
 -- @name update_pwd
 -- @param id:i64

@@ -7,7 +7,7 @@ use crate::dao::music_complaint_dao::MusicComplaint;
 use crate::dao::music_correct_dao::MusicCorrect;
 use crate::dao::{music_video_dao, music_collect_dao, music_complaint_dao, music_correct_dao, music_dao, music_file_dao, music_lrc_dao};
 use crate::service::music_service::{self, MusicVo};
-use crate::service::{collect_service, dfs_service, video_task};
+use crate::service::{collect_service, dfs_service, video_task, vip_service};
 use crate::util::time_util;
 use crate::web::biz_error::BizError;
 use crate::web::filter::user_auth::LoginUser;
@@ -61,6 +61,7 @@ pub async fn search(login: Ext<LoginUser>, key: String) -> Result<Vec<MusicVo>, 
         music_file_dao::select_by_musics(&mut ctx, ids).await?
     };
     let file_map = music_service::group_files(&files);
+    let vip_limited = vip_service::is_limited(&login);
     let result = list
         .into_iter()
         .map(|(_, it)| {
@@ -73,7 +74,7 @@ pub async fn search(login: Ext<LoginUser>, key: String) -> Result<Vec<MusicVo>, 
                 duration: it.duration,
                 video_state: it.videoState,
                 play_count: Some(it.playCount),
-                files: music_service::files_of(&file_map, it.id),
+                files: music_service::files_of(&file_map, it.id, vip_limited),
                 ..Default::default()
             }
         })
@@ -186,7 +187,7 @@ pub async fn play(form: form::MusicPlay) -> Result<(), BizError> {
 
 /// 歌曲详情
 #[GET("/api/music/detail")]
-pub async fn detail(id: i64) -> Result<MusicVo, BizError> {
+pub async fn detail(login: Ext<LoginUser>, id: i64) -> Result<MusicVo, BizError> {
     let mut ctx = lib_db::get_context();
     let Some(music) = music_dao::select_detail(&mut ctx, id).await? else {
         return Err(BizError::not_found());
@@ -203,7 +204,7 @@ pub async fn detail(id: i64) -> Result<MusicVo, BizError> {
         video_state: music.videoState,
         favorite_id: None,
         play_count: None,
-        files: music_service::file_vos(&files),
+        files: music_service::file_vos(&files, vip_service::is_limited(&login)),
         collect: music_service::collect_vo(music.platform, music.extra),
     })
 }
@@ -302,14 +303,17 @@ pub struct VideoFileVo {
     pub size: Option<i64>,
     pub md5: Option<String>,
 
-    // 播放地址,可以播放时才有
+    // 播放地址,可以播放时才有;只有VIP才能看的文件(vip_only为true)没有地址
     pub url: Option<String>,
+
+    // 是否只有VIP才能看(开启了VIP功能,并且当前会员不是VIP时,有单独的流畅版的原画是true)
+    pub vip_only: bool,
 }
 
 /// 获取歌曲视频;还没有采集过视频(老的歌曲)或者采集失败超过一段时间时,开始采集
 /// 采集、转码过程中客户端每隔几秒请求一次,直到可以播放
 #[GET("/api/music/video")]
-pub async fn video(id: i64) -> Result<VideoVo, BizError> {
+pub async fn video(login: Ext<LoginUser>, id: i64) -> Result<VideoVo, BizError> {
     let mut ctx = lib_db::get_context();
     let Ok(music) = music_dao::select_one(&mut ctx, id).await else {
         return Err(BizError::not_found());
@@ -339,6 +343,7 @@ pub async fn video(id: i64) -> Result<VideoVo, BizError> {
             size: it.size,
             md5: it.md5,
             url: if it.state == 1 { dfs_service::file_url(it.path.as_deref()) } else { None },
+            vip_only: false,
         };
         if it.quality == video_task::QUALITY_ORIGINAL {
             result.original = Some(vo);
@@ -350,6 +355,13 @@ pub async fn video(id: i64) -> Result<VideoVo, BizError> {
     //原画不高于480p 25fps时没有单独的流畅版,使用原画
     if result.smooth.is_none() {
         result.smooth = result.original.clone();
+    } else if vip_service::is_limited(&login) {
+        //不是VIP的会员只能看流畅版(流畅版转码失败时还是可以看原画,否则这个视频就看不了了)
+        let smooth_failed = result.smooth.as_ref().is_some_and(|it| it.state == 2);
+        if let Some(original) = result.original.as_mut().filter(|_| !smooth_failed) {
+            original.url = None;
+            original.vip_only = true;
+        }
     }
     Ok(result)
 }

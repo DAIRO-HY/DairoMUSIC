@@ -152,6 +152,56 @@ pub struct UserEdit {
     // 是否信赖用户
     #[serde(default)]
     pub friend_flag: i64,
+
+    // 是否永久VIP
+    #[serde(default)]
+    pub vip_forever: i64,
+
+    // VIP到期日期(如 2026-11-14,到这一天结束),为空表示不是VIP
+    #[serde(default)]
+    pub vip_date: String,
+}
+
+/// 批量生成VIP兑换码
+#[derive(Deserialize, Debug, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct VipCodeGenerate {
+    // 生成的数量
+    #[validate(range(min = 1, max = 10000, message = "数量必须在1到10000之间"))]
+    pub count: i64,
+
+    // 卡密的长度
+    #[validate(range(min = 8, max = 32, message = "卡密长度必须在8到32位之间"))]
+    pub pwd_length: i64,
+
+    // 是否永久VIP的兑换码
+    #[serde(default)]
+    pub forever: i64,
+
+    // 兑换之后VIP的天数(不是永久时)
+    #[serde(default)]
+    pub days: i64,
+
+    // 兑换码的有效期(如 2026-11-14,到这一天结束)
+    #[serde(default)]
+    pub expire_date: String,
+}
+
+/// 兑换VIP
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct VipRedeem {
+    // 卡号
+    #[serde(default)]
+    pub card_no: String,
+
+    // 卡密
+    #[serde(default)]
+    pub card_pwd: String,
+
+    // 1:已经确认(已经是永久VIP,兑换没有实际效果时需要确认)
+    #[serde(default)]
+    pub confirm: i64,
 }
 
 /// 歌曲编辑
@@ -580,6 +630,14 @@ pub struct SystemConfig {
     // 是否允许下载视频 1:允许 0:不允许
     #[serde(default)]
     pub allow_download_video: i64,
+
+    // 是否开启VIP功能 1:开启 0:关闭
+    #[serde(default)]
+    pub vip_enable: i64,
+
+    // VIP有效期最多可以累加到多少年
+    #[validate(range(min = 1, max = 100, message = "年数必须在1到100之间"))]
+    pub vip_max_years: i64,
 }
 
 /// DairoDFS配置

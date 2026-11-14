@@ -1,6 +1,7 @@
 //! 客户端:账号
 
 use crate::dao::{user_dao, user_login_dao};
+use crate::service::vip_service::{self, VipVo};
 use crate::service::{config_service, dfs_service, email_service, user_service};
 use crate::util::{image_util, pwd_util, request_util, time_util};
 use crate::web::biz_error::BizError;
@@ -46,6 +47,9 @@ pub struct UserInfo {
 
     // 是否信赖用户(纠错直接生效)
     pub is_friend: bool,
+
+    // VIP状态
+    pub vip: VipVo,
 }
 
 /// 获取会员信息
@@ -53,12 +57,13 @@ async fn user_info(id: i64) -> Result<UserInfo, BizError> {
     let mut ctx = lib_db::get_context();
     let user = user_dao::select_one(&mut ctx, id).await?;
     Ok(UserInfo {
+        vip: vip_service::vo(&user),
         id: user.id,
-        email: if user.tempFlag == 1 { None } else { user.email },
         nick: user.nick,
         logo: dfs_service::file_url(user.logo.as_deref()),
         is_temp: user.tempFlag == 1,
         is_friend: user.friendFlag == 1,
+        email: if user.tempFlag == 1 { None } else { user.email },
     })
 }
 

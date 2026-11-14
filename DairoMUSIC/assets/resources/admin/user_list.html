@@ -24,6 +24,18 @@
 </main>
 <script>
     const USER_STATE = {0: badge("无效"), 1: badge("有效", "success"), 2: badge("注销", "warning")}
+    /** VIP状态 */
+    function vipHtml(it) {
+        if (it.vipForever === 1) {
+            return badge("永久", "warning")
+        }
+        if (it.vipTime === 0) {
+            return `<span class="text-secondary">否</span>`
+        }
+        const date = formatTime(it.vipTime).substring(0, 10)
+        return it.isVip ? `${badge("VIP", "warning")} <span class="small">到${date}</span>` : `<span class="text-secondary small">${date}已到期</span>`
+    }
+
     const yesNo = value => value === 1 ? badge("是", "primary") : `<span class="text-secondary">否</span>`
     const table = new PageTable({
         el: "#table",
@@ -35,6 +47,7 @@
             {title: "邮箱", data: "email", sortKey: "email"},
             {title: "昵称", render: it => it.nick ? escapeHtml(it.nick) : `<span class="text-secondary">未设置</span>`},
             {title: "状态", render: it => USER_STATE[it.state] || "", sortKey: "state"},
+            {title: "VIP", render: it => vipHtml(it), sortKey: "vipTime", className: "text-nowrap"},
             {title: "信赖用户", render: it => yesNo(it.friendFlag)},
             {title: "临时用户", render: it => yesNo(it.tempFlag)},
             {title: "注册时间", render: it => formatTime(it.date), sortKey: "date", className: "text-nowrap"},

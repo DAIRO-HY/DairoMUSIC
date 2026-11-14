@@ -12,13 +12,13 @@ use std::time::Duration;
 struct Assets;
 
 /// 数据库版本号
-const VERSION: i32 = 7;
+const VERSION: i32 = 8;
 
 /// 数据库文件名
 pub const DB_FILE_NAME: &str = "dairo-music.sqlite";
 
 /// 建表顺序(init_data.sql是全新安装时的初始数据,放在最后)
-const SQL_FILES: [&str; 23] = [
+const SQL_FILES: [&str; 24] = [
     "admin.sql",
     "admin_token.sql",
     "admin_role.sql",
@@ -42,6 +42,7 @@ const SQL_FILES: [&str; 23] = [
     "user_favorite.sql",
     "user_login.sql",
     "user_music.sql",
+    "vip_code.sql",
 ];
 
 /// 版本1升级到版本2:客户端编号统一为 0:WEB 1:Android 2:IOS 3:Windows 4:Mac 5:Linux
@@ -103,6 +104,18 @@ WHERE NOT EXISTS (SELECT 1 FROM admin_menu_bar m WHERE m.url = it.url);
 INSERT OR IGNORE INTO admin_permission (roleId, menuId)
 SELECT 1, id FROM admin_menu_bar
 WHERE (name = '发现页管理' AND parentId = 0) OR url IN ('/admin/swiper_list.html', '/admin/useful_list.html', '/admin/favorite_list.html');
+";
+
+/// 版本7升级到版本8:会员增加VIP到期时间、是否永久VIP;新增「VIP兑换码」菜单(vip_code表在升级时用建表文件创建)
+const UPGRADE_V8: &str = "
+ALTER TABLE user ADD COLUMN vipTime INT8 NOT NULL default 0;
+ALTER TABLE user ADD COLUMN vipForever INTEGER NOT NULL default 0;
+INSERT INTO admin_menu_bar (name, ico, url, parentId, orderNum)
+SELECT 'VIP兑换码', NULL, '/admin/vip_code_list.html', (SELECT parentId FROM admin_menu_bar WHERE url = '/admin/user_list.html'), 20
+WHERE EXISTS (SELECT 1 FROM admin_menu_bar WHERE url = '/admin/user_list.html')
+  AND NOT EXISTS (SELECT 1 FROM admin_menu_bar WHERE url = '/admin/vip_code_list.html');
+INSERT OR IGNORE INTO admin_permission (roleId, menuId)
+SELECT 1, id FROM admin_menu_bar WHERE url = '/admin/vip_code_list.html';
 ";
 
 /// 全新安装时的初始数据(菜单、超级管理员角色)
@@ -227,6 +240,12 @@ async fn upgrade(with_init_data: bool) -> Result<(), Box<dyn Error>> {
         if version < 7 {
             let mut tx = (&mut *conn).begin().await?;
             sqlx::raw_sql(UPGRADE_V7).execute(&mut *tx).await?;
+            tx.commit().await?;
+        }
+        if version < 8 {
+            let mut tx = (&mut *conn).begin().await?;
+            sqlx::raw_sql(UPGRADE_V8).execute(&mut *tx).await?;
+            execute_sql_file(&mut tx, "vip_code.sql").await?;
             tx.commit().await?;
         }
     }

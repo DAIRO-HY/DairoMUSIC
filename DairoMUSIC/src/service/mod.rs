@@ -8,3 +8,4 @@ pub mod process_service;
 pub mod software_service;
 pub mod user_service;
 pub mod video_task;
+pub mod vip_service;

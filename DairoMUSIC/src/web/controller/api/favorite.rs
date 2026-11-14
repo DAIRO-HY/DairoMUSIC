@@ -3,7 +3,7 @@
 use crate::dao::user_favorite_dao::UserFavorite;
 use crate::dao::user_music_dao::{FavoriteMusicTemp, UserMusic};
 use crate::dao::{music_dao, music_file_dao, user_favorite_dao, user_music_dao};
-use crate::service::dfs_service;
+use crate::service::{dfs_service, vip_service};
 use crate::service::music_service::{self, MusicVo};
 use crate::util::time_util;
 use crate::web::biz_error::BizError;
@@ -210,7 +210,7 @@ pub async fn musics(login: Ext<LoginUser>, id: i64) -> Result<Vec<MusicVo>, BizE
     get_visible_favorite(&mut ctx, id, &login).await?;
     let list = user_music_dao::select_music_by_favorite(&mut ctx, id, login.is_test as i64).await?;
     let files = music_file_dao::select_by_favorite(&mut ctx, id).await?;
-    Ok(to_music_list(list, &files))
+    Ok(to_music_list(list, &files, vip_service::is_limited(&login)))
 }
 
 /// 我所有歌单里的歌曲(客户端同步用)
@@ -219,11 +219,11 @@ pub async fn all_musics(login: Ext<LoginUser>) -> Result<Vec<MusicVo>, BizError>
     let mut ctx = lib_db::get_context();
     let list = user_music_dao::select_music_by_user(&mut ctx, login.id).await?;
     let files = music_file_dao::select_by_user(&mut ctx, login.id).await?;
-    Ok(to_music_list(list, &files))
+    Ok(to_music_list(list, &files, vip_service::is_limited(&login)))
 }
 
 /// 转换成返回给客户端的歌曲列表
-fn to_music_list(list: Vec<FavoriteMusicTemp>, files: &[crate::dao::music_file_dao::MusicFile]) -> Vec<MusicVo> {
+fn to_music_list(list: Vec<FavoriteMusicTemp>, files: &[crate::dao::music_file_dao::MusicFile], vip_limited: bool) -> Vec<MusicVo> {
     let file_map = music_service::group_files(files);
     list.into_iter()
         .map(|it| {
@@ -237,7 +237,7 @@ fn to_music_list(list: Vec<FavoriteMusicTemp>, files: &[crate::dao::music_file_d
                 video_state: it.videoState,
                 favorite_id: Some(it.favoriteId),
                 play_count: None,
-                files: music_service::files_of(&file_map, it.id),
+                files: music_service::files_of(&file_map, it.id, vip_limited),
                 collect: music_service::collect_vo(it.platform, it.extra),
             }
         })

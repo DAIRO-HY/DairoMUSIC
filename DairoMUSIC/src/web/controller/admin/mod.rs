@@ -15,3 +15,4 @@ pub mod service_util;
 pub mod software;
 pub mod system_config;
 pub mod user;
+pub mod vip_code;

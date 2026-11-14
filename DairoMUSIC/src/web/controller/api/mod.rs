@@ -7,3 +7,4 @@ pub mod music;
 pub mod music_upload;
 pub mod public;
 pub mod user;
+pub mod vip;

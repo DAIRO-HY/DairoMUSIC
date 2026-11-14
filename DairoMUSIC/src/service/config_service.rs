@@ -57,6 +57,13 @@ pub struct Config {
     #[serde(default = "default_true")]
     pub allow_download_video: bool,
 
+    // 是否开启VIP功能(开启之后不是VIP的会员只能听标准音质的歌曲、看流畅版的视频,不能下载)
+    pub vip_enable: bool,
+
+    // 已经是VIP的会员再兑换时,VIP有效期最多可以累加到多少年(没有设置过时为2年)
+    #[serde(default = "default_vip_max_years")]
+    pub vip_max_years: i64,
+
     // 采集服务是否使用内置安装的DairoMUSIC-Search(随DairoMUSIC一起启动),否则使用collect_url
     #[serde(default = "default_true")]
     pub collect_builtin: bool,
@@ -125,6 +132,10 @@ pub struct Config {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_vip_max_years() -> i64 {
+    2
 }
 
 /// 内存里的配置

@@ -45,6 +45,25 @@
                     <label class="form-check-label" for="friend0">否</label>
                 </div>
             </div>
+            <div class="mb-3">
+                <label class="form-label">VIP到期日期 <span id="vipInfo" class="small ms-1"></span></label>
+                <div class="d-flex align-items-center gap-2">
+                    <input name="vipDate" class="form-control" type="date" style="max-width: 200px">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="$('input[name=vipDate]').val('')">清空</button>
+                </div>
+                <div class="text-secondary small mt-1">到这一天结束。清空表示不是VIP。会员用兑换码兑换之后也会修改这个日期</div>
+            </div>
+            <div class="mb-4">
+                <label class="form-label d-block">永久VIP <span class="text-secondary small">(选择"是"时不看到期日期)</span></label>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="vipForever" value="1" id="vipForever1">
+                    <label class="form-check-label" for="vipForever1">是</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="vipForever" value="0" id="vipForever0">
+                    <label class="form-check-label" for="vipForever0">否</label>
+                </div>
+            </div>
             <button type="submit" class="btn btn-primary px-4">保存</button>
             <a class="btn btn-light ms-2" href="/admin/user_list.html">返回</a>
         </form>
@@ -54,6 +73,14 @@
     $(function () {
         $.ajaxByData("/admin/api/user/detail").add("id", getParam("id", "0")).success(data => {
             $("#form").bindValue(data)
+
+            //到期时间只显示日期
+            $("input[name='vipDate']").val(data.vipTime ? formatTime(data.vipTime).substring(0, 10) : "")
+            if (data.vipForever === 1) {
+                $("#vipInfo").html(badge("永久VIP", "warning"))
+            } else if (data.vipTime) {
+                $("#vipInfo").html(data.isVip ? badge("VIP", "warning") : badge("已到期"))
+            }
             if (data.id !== 0) {
                 $("input[name='pwd']").attr("placeholder", "不修改请留空")
                 $("#logo").html(logoHtml(data.logo, 56))

@@ -2,7 +2,7 @@
 
 use crate::dao::user_dao;
 use crate::dao::user_dao::User;
-use crate::service::dfs_service;
+use crate::service::{dfs_service, vip_service};
 use crate::util::{pwd_util, time_util};
 use crate::web::biz_error::BizError;
 use crate::web::form;
@@ -29,11 +29,23 @@ pub struct UserItem {
     pub temp_flag: i64,
     pub friend_flag: i64,
     pub test_flag: i64,
+
+    // VIP到期时间(毫秒),0:不是VIP
+    pub vip_time: i64,
+
+    // 是否永久VIP
+    pub vip_forever: i64,
+
+    // 现在是否VIP
+    pub is_vip: bool,
 }
 
 impl From<User> for UserItem {
     fn from(it: User) -> Self {
         Self {
+            is_vip: vip_service::is_vip(&it),
+            vip_time: it.vipTime,
+            vip_forever: it.vipForever,
             id: it.id,
             email: it.email,
             nick: it.nick,
@@ -53,7 +65,7 @@ impl From<User> for UserItem {
 /// 会员列表
 #[GET("/admin/api/user/list")]
 pub async fn list(page: Query<PageForm>, id: Option<i64>, email: Option<String>, state: Option<i64>) -> Result<PageData<UserItem>, BizError> {
-    let page_in = page.to_page_in(&["id", "email", "state", "lastLoginTime", "date"], "id", "desc");
+    let page_in = page.to_page_in(&["id", "email", "state", "lastLoginTime", "date", "vipTime"], "id", "desc");
     let mut ctx = lib_db::get_context();
     let (total, list) = user_dao::page_list(&mut ctx, page_in, id, non_empty(email), state).await?;
     Ok(PageData::new(total, list.into_iter().map(UserItem::from).collect()))
@@ -88,6 +100,15 @@ pub async fn edit(form: form::UserEdit) -> Result<(), BizError> {
     if !(0..=2).contains(&form.state) {
         return Err(BizError::field("state", "状态不正确"));
     }
+    let vip_forever = (form.vip_forever == 1) as i64;
+    let vip_time = if form.vip_date.trim().is_empty() {
+        0
+    } else {
+        let Some(vip_time) = time_util::date_end_millis(&form.vip_date) else {
+            return Err(BizError::field("vipDate", "日期格式不正确"));
+        };
+        vip_time
+    };
     let pwd = if form.pwd.is_empty() {
         None
     } else {
@@ -104,14 +125,20 @@ pub async fn edit(form: form::UserEdit) -> Result<(), BizError> {
             state: form.state,
             date: time_util::current_millis(),
             friendFlag: form.friend_flag,
+            vipTime: vip_time,
+            vipForever: vip_forever,
             ..Default::default()
         };
         user_dao::insert(&mut ctx, &user).await?;
     } else {
-        if user_dao::select_one(&mut ctx, form.id).await.is_err() {
+        let Ok(user) = user_dao::select_one(&mut ctx, form.id).await else {
             return Err(biz_error!("会员不存在"));
-        }
+        };
         user_dao::update_by_admin(&mut ctx, form.id, form.email, form.state, form.friend_flag).await?;
+
+        //页面上只能选择日期;日期没有修改时保留原来的到期时间(兑换的到期时间精确到毫秒)
+        let vip_time = if user.vipTime != 0 && time_util::date_text(user.vipTime) == form.vip_date.trim() { user.vipTime } else { vip_time };
+        user_dao::update_vip(&mut ctx, form.id, vip_time, vip_forever).await?;
         if let Some(pwd) = pwd {
             user_dao::update_pwd(&mut ctx, form.id, pwd).await?;
         }

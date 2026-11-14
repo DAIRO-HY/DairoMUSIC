@@ -26,6 +26,9 @@ pub struct LoginUser {
 
     // 是否测试用户(应用市场审核用,只能看到测试歌曲)
     pub is_test: bool,
+
+    // 现在是否VIP
+    pub is_vip: bool,
 }
 
 /// 最后在线时间的更新间隔(毫秒)
@@ -91,6 +94,7 @@ pub async fn find_login_user(headers: &HeaderMap) -> Result<LoginUser, BizError>
         is_temp: user.tempFlag == 1,
         is_friend: user.friendFlag == 1,
         is_test: user.testFlag == 1,
+        is_vip: crate::service::vip_service::is_vip(&user),
     })
 }
 

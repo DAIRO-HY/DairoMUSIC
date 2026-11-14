@@ -57,8 +57,11 @@ pub struct FileVo {
     pub size: i64,
     pub format: String,
 
-    // 播放地址
+    // 播放地址;只有VIP才能听的文件(vip_only为true)没有地址
     pub url: Option<String>,
+
+    // 是否只有VIP才能听(开启了VIP功能,并且当前会员不是VIP时,除了最低音质的文件都是true)
+    pub vip_only: bool,
 }
 
 /// 采集信息
@@ -94,6 +97,7 @@ impl From<&MusicFile> for FileVo {
             size: it.size,
             format: it.format.clone(),
             url: dfs_service::file_url(Some(&it.path)),
+            vip_only: false,
         }
     }
 }
@@ -111,10 +115,19 @@ pub fn collect_vo(platform: Option<String>, extra: Option<String>) -> Option<Col
 }
 
 /// 转换成返回给客户端的文件列表,按比特率从低到高排序
-pub fn file_vos(files: &[&MusicFile]) -> Vec<FileVo> {
+/// - vip_limited 是否受到非VIP的限制:只有最低音质(标准音质)的文件有播放地址,其他文件标记为只有VIP才能听
+///   (文件信息还是返回,VIP到期之后客户端可以继续播放以前缓存的文件)
+pub fn file_vos(files: &[&MusicFile], vip_limited: bool) -> Vec<FileVo> {
     let mut files = files.to_vec();
     files.sort_by_key(|it| (it.bitRate.unwrap_or(0), it.id));
-    files.into_iter().map(Into::into).collect()
+    let mut list: Vec<FileVo> = files.into_iter().map(Into::into).collect();
+    if vip_limited {
+        for it in list.iter_mut().skip(1) {
+            it.url = None;
+            it.vip_only = true;
+        }
+    }
+    list
 }
 
 /// 按歌曲ID分组
@@ -127,8 +140,8 @@ pub fn group_files(files: &[MusicFile]) -> HashMap<i64, Vec<&MusicFile>> {
 }
 
 /// 某首歌曲的文件列表
-pub fn files_of(file_map: &HashMap<i64, Vec<&MusicFile>>, music_id: i64) -> Vec<FileVo> {
-    file_map.get(&music_id).map(|files| file_vos(files)).unwrap_or_default()
+pub fn files_of(file_map: &HashMap<i64, Vec<&MusicFile>>, music_id: i64, vip_limited: bool) -> Vec<FileVo> {
+    file_map.get(&music_id).map(|files| file_vos(files, vip_limited)).unwrap_or_default()
 }
 
 /// 把几首歌曲合并到保留的歌曲:收藏了这些歌曲的歌单改为收藏保留的歌曲,这些歌曲标记为删除

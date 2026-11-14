@@ -54,9 +54,10 @@
 ```
 会员信息:
 ```json
-{"id": 1, "email": "邮箱,临时会员为null", "nick": "昵称", "logo": "头像地址", "isTemp": false, "isFriend": false}
+{"id": 1, "email": "邮箱,临时会员为null", "nick": "昵称", "logo": "头像地址", "isTemp": false, "isFriend": false,
+ "vip": {"enable": true, "isVip": true, "forever": false, "expireTime": 1798084286000}}
 ```
-`isFriend` 为信赖用户,纠错直接生效。
+`isFriend` 为信赖用户,纠错直接生效。`vip` 见下面的"VIP"。
 
 | 接口 | 需要登录 | 参数 | 说明 |
 |---|---|---|---|
@@ -90,12 +91,12 @@
     {
       "id": 203337, "md5": "文件的MD5,老数据可能为null",
       "bitRate": 128, "sampleRate": 44100, "dataStartPosition": null, "sampleCount": null, "frameLength": null,
-      "size": 4560446, "format": "mp3", "url": "播放地址(支持断点续传)"
+      "size": 4560446, "format": "mp3", "url": "播放地址(支持断点续传)", "vipOnly": false
     },
     {
       "id": 203338, "md5": "...",
       "bitRate": 320, "sampleRate": 44100, "dataStartPosition": null, "sampleCount": null, "frameLength": null,
-      "size": 11401115, "format": "mp3", "url": "播放地址(支持断点续传)"
+      "size": 11401115, "format": "mp3", "url": "播放地址(支持断点续传)", "vipOnly": false
     }
   ],
   "collect": {
@@ -108,6 +109,7 @@
 - `favoriteId` 只有歌单里的歌曲才有。
 - `playCount` 播放次数,只有曲库的搜索结果(`/api/music/search`)才有。
 - `files` 是这首歌所有音质的文件,按 `bitRate` 从低到高排序;空数组表示还没有采集完成,可以用 `collect.url` 播放。
+- 文件的 `vipOnly` 为 true 表示只有VIP才能听,这时 `url` 为 null。见下面的"VIP"。
 - 文件的 `id` 是文件ID,不会改变,可以用来做缓存的key(DairoDFS的地址变了也不影响)。
 - `videoState` 视频状态:0 未采集,1 采集中,2 有视频,3 没有视频(YouTube上只有一张图片),4 后台删除了视频,5 采集失败。3、4 表示没有视频;0、1、5 还不确定,打开视频页时调用 `/api/music/video`。采集平台的搜索结果(`id` 为0)固定为0。
 - `collect.videoUrl`、`collect.videoInfoUrl`:没有启用视频采集时为 null。见下面的"视频"。
@@ -149,7 +151,7 @@
   "state": 2,
   "original": {
     "id": 12, "quality": 1, "state": 1, "width": 3840, "height": 2160, "codec": "hevc",
-    "bitRate": 14400, "frameRate": 30, "duration": 223488, "size": 402653184, "md5": "...", "url": "播放地址"
+    "bitRate": 14400, "frameRate": 30, "duration": 223488, "size": 402653184, "md5": "...", "url": "播放地址", "vipOnly": false
   },
   "smooth": {"id": 13, "quality": 2, "state": 0, "width": 0, "height": 0, "codec": null, "...": "...", "url": null}
 }
@@ -158,6 +160,7 @@
 - 视频文件的 `state`:0 转码中,1 可以播放,2 转码失败。可以播放时才有 `url`。
 - 先转码流畅版,再处理原画。`original`、`smooth` 在 `state=2` 时都不为 null;原画不高于480p 25fps时没有单独的流畅版,`smooth` 和 `original` 是同一个文件(`id` 相同)。
 - 缓存、下载的key用视频文件的 `id`。
+- 视频文件的 `vipOnly` 为 true 表示只有VIP才能看,这时 `url` 为 null。见下面的"VIP"。
 
 ### 还没有收藏的歌曲(搜索结果)
 采集平台的搜索结果(`id` 为0)只能播放预览版(iPhone能直接播放的最高规格,一般是1080p H.264),直接访问采集服务,不需要token:
@@ -165,6 +168,39 @@
 2. 返回 `OK` 后播放 `collect.videoUrl`。
 
 采集服务的缓存保留24小时;加入曲库(`POST /api/music/collect`)时服务器同时开始采集视频。
+
+## VIP
+
+后台"系统配置"里可以开启VIP功能(默认关闭)。开启之后,不是VIP的会员只能听标准音质的歌曲、看流畅版的视频,不能下载。会员用兑换码(卡号+卡密,后台生成)成为VIP。
+
+### VIP状态
+会员信息(登录接口的返回值、`GET /api/user/info`)里的 `vip`:
+```json
+{"enable": true, "isVip": true, "forever": false, "expireTime": 1798084286000}
+```
+- `enable`:VIP功能对这个会员是否生效。为 false 时所有人都没有限制,客户端**不显示任何VIP相关的内容**(兑换入口、VIP标记、到期时间)。后台没有开启VIP功能、或者是应用市场审核用的测试会员时为 false。
+- `isVip`:现在是否VIP。
+- `forever`:是否永久VIP,到期时间显示"永久"。
+- `expireTime`:VIP到期时间(毫秒)。0 表示从来不是VIP;小于当前时间表示已经到期;`forever` 为 true 时没有意义。
+- VIP状态会变化(到期、兑换、后台修改),启动APP、回到前台、打开"我的"页面时调用 `GET /api/user/info` 刷新。服务器按请求时的状态判断,到期之后返回的数据马上就有限制。
+
+### 非VIP的限制(`enable` 为 true 并且 `isVip` 为 false)
+- **歌曲**:`files` 还是返回所有音质的文件,但是只有第一个(最低音质,即标准音质)有 `url`,其他文件 `url` 为 null、`vipOnly` 为 true。音质选项上可以给 `vipOnly` 的文件显示VIP标记,选择时提示需要VIP。播放、缓存时只从有 `url` 的文件里选择。
+- **视频**:`/api/music/video` 的 `original` 的 `url` 为 null、`vipOnly` 为 true,只能看 `smooth`。没有单独的流畅版(`smooth` 和 `original` 是同一个文件)、或者流畅版转码失败时,原画可以看。
+- **下载**:歌曲、视频都不能下载,隐藏下载按钮(或者点击时提示需要VIP)。是否可以下载 = 后台允许下载(`allowDownloadMusic` / `allowDownloadVideo`)**并且**(`vip.enable` 为 false **或者** `vip.isVip` 为 true)。后台不允许下载时VIP也不能下载。
+- **已经下载、缓存的文件不受限制**:VIP到期之后,以前下载、缓存的高音质歌曲和原画视频可以继续播放。本地有文件(按文件 `id` 查找)时直接播放本地文件,不看 `url` 和 `vipOnly`。
+- 采集平台的搜索结果(`id` 为0,用 `collect.url` 播放)没有限制。
+
+### POST /api/vip/redeem
+兑换VIP。参数:`cardNo`(卡号,16位数字,可以带空格或横线)、`cardPwd`(卡密,不区分大小写)、`confirm`(可选,1:已经确认)。返回:
+```json
+{"needConfirm": false, "message": "兑换成功,VIP有效期到2026-12-14", "vip": {"enable": true, "isVip": true, "forever": false, "expireTime": 1798084286000}}
+```
+- `needConfirm` 为 false:兑换成功,显示 `message`,用 `vip` 更新本地的VIP状态。
+- `needConfirm` 为 true:**兑换码还没有被使用**。会员已经是永久VIP,兑换没有实际效果,只会消耗兑换码。弹框显示 `message` 让会员确认,确认之后带上 `confirm=1` 再提交一次;取消就不再提交。
+- 不是VIP、或者VIP已经到期时从现在开始计算;已经是VIP时在到期时间上累加,累加之后超过后台设置的最长年数(默认2年)时返回错误,兑换码不会被使用。永久的兑换码兑换之后成为永久VIP。
+- 失败时返回错误(HTTP 500,响应体是提示文字,直接显示):卡号或卡密不正确、已经被使用、已经作废、已经过期、超过最长年数、VIP功能没有开启。没有填写卡号、卡密时是字段错误(`code=2`)。
+- 同一个会员1小时内输错10次之后,1小时内不能再兑换。
 
 ## 歌单
 

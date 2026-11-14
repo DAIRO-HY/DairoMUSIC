@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>VIP兑换码</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="search" class="app-toolbar">
+            <input name="batchNo" class="form-control" placeholder="批次号" autocomplete="off" style="width: 170px">
+            <input name="cardNo" class="form-control" placeholder="卡号" autocomplete="off" style="width: 190px">
+            <select name="state" class="form-select" style="width: 130px">
+                <option value="">全部状态</option>
+                <option value="0">未使用</option>
+                <option value="1">已使用</option>
+                <option value="3">已过期</option>
+                <option value="2">已作废</option>
+            </select>
+            <input name="userId" class="form-control" placeholder="兑换的会员ID" type="number" style="width: 140px">
+            <button type="button" class="btn btn-primary ms-auto" onclick="openGenerate()"><i class="bi bi-plus-lg me-1"></i>生成兑换码</button>
+        </form>
+        <div class="text-secondary small mb-2">会员在APP里输入卡号和卡密兑换VIP。VIP功能在「系统配置」里开启</div>
+        <form id="generateForm" class="alert alert-light border d-none" action="/admin/api/vip_code/generate" onsubmit="onGenerateSubmit();return false;">
+            <div class="fw-medium mb-3">生成兑换码 <span class="text-secondary small fw-normal">(批次号自动使用当前时间)</span></div>
+            <div class="row g-3" style="max-width: 760px">
+                <div class="col-6 col-md-3">
+                    <label class="form-label">数量</label>
+                    <input name="count" class="form-control" type="number" min="1" max="10000" value="10">
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label">卡密长度</label>
+                    <select name="pwdLength" class="form-select">
+                        <option value="8">8位</option>
+                        <option value="12">12位</option>
+                        <option value="16" selected>16位</option>
+                        <option value="20">20位</option>
+                        <option value="24">24位</option>
+                        <option value="32">32位</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label">VIP时长</label>
+                    <select name="forever" class="form-select" onchange="onForeverChange()">
+                        <option value="0">按天数</option>
+                        <option value="1">永久</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-3" id="daysBox">
+                    <label class="form-label">天数</label>
+                    <input name="days" class="form-control" type="number" min="1" max="36500" value="30">
+                </div>
+                <div class="col-12 col-md-5">
+                    <label class="form-label">兑换码有效期 <span class="text-secondary small">(过了这一天不能兑换)</span></label>
+                    <input name="expireDate" class="form-control" type="date">
+                </div>
+            </div>
+            <div class="mt-3">
+                <button type="submit" class="btn btn-primary px-4">生成</button>
+                <button type="button" class="btn btn-light ms-2" onclick="closeGenerate()">取消</button>
+            </div>
+        </form>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <span class="text-secondary small">勾选的兑换码:</span>
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="onVoidClick()"><i class="bi bi-slash-circle me-1"></i>作废</button>
+            <span class="text-secondary small ms-3">批次号里填写的批次:</span>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="onExportClick()"><i class="bi bi-download me-1"></i>导出CSV</button>
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="onVoidBatchClick()"><i class="bi bi-slash-circle me-1"></i>整批作废</button>
+            <span class="text-secondary small">已经使用的兑换码不能作废</span>
+        </div>
+        <div id="table"></div>
+    </div>
+</main>
+<script>
+    /** 导出时的状态文字(3是已过期) */
+    const CODE_STATES = {0: "未使用", 1: "已使用", 2: "已作废", 3: "已过期"}
+
+    /** 卡号每4位一组显示 */
+    const cardNoText = cardNo => cardNo.replace(/(.{4})(?=.)/g, "$1 ")
+    const daysText = days => days === 0 ? "永久" : days + "天"
+
+    /** 日期 yyyy-MM-dd */
+    function formatDate(millis) {
+        const d = new Date(millis)
+        const pad = it => String(it).padStart(2, "0")
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    }
+
+    function codeStateBadge(it) {
+        if (it.state === 1) {
+            return badge("已使用", "success")
+        }
+        if (it.state === 2) {
+            return badge("已作废", "danger")
+        }
+        return it.expired ? badge("已过期", "warning") : badge("未使用", "primary")
+    }
+
+    const table = new PageTable({
+        el: "#table",
+        url: "/admin/api/vip_code/list",
+        search: "#search",
+        selectable: true,
+        columns: [
+            {title: "卡号", render: it => `<span class="font-monospace">${cardNoText(it.cardNo)}</span>`, sortKey: "cardNo", className: "text-nowrap"},
+            {title: "卡密", render: it => `<span class="font-monospace">${escapeHtml(it.cardPwd)}</span>`},
+            {title: "批次号", render: it => `<a href="javascript:void(0)" class="text-decoration-none font-monospace" onclick="filterBatch('${it.batchNo}')">${it.batchNo}</a>`, sortKey: "batchNo"},
+            {title: "VIP时长", render: it => it.days === 0 ? badge("永久", "warning") : daysText(it.days), sortKey: "days"},
+            {title: "有效期", render: it => formatDate(it.expireTime), sortKey: "expireTime", className: "text-nowrap"},
+            {title: "状态", render: it => codeStateBadge(it), sortKey: "state"},
+            {
+                title: "兑换的会员", render: it => it.userId == null ? ""
+                    : `<a href="/admin/user_edit.html?id=${it.userId}" class="text-decoration-none">${escapeHtml(it.userEmail || "没有邮箱")}</a> <span class="text-secondary small">ID:${it.userId}</span>`
+            },
+            {title: "兑换时间", render: it => it.useTime ? formatTime(it.useTime) : "", sortKey: "useTime", className: "text-nowrap"}
+        ]
+    })
+    $(function () {
+        //有效期默认一年之后
+        const date = new Date()
+        date.setFullYear(date.getFullYear() + 1)
+        $("input[name='expireDate']").val(formatDate(date.getTime()))
+        table.load()
+    })
+
+    /** 只看某个批次 */
+    function filterBatch(batchNo) {
+        $("#search input[name='batchNo']").val(batchNo)
+        table.load(1)
+    }
+
+    function openGenerate() {
+        $("#generateForm").removeClass("d-none")
+    }
+
+    function closeGenerate() {
+        $("#generateForm").addClass("d-none")
+    }
+
+    function onForeverChange() {
+        $("#daysBox").toggleClass("d-none", $("select[name='forever']").val() === "1")
+    }
+
+    function onGenerateSubmit() {
+        $("#generateForm").ajaxByForm().success(batchNo => {
+            closeGenerate()
+
+            //只显示刚生成的这一批,方便导出
+            $("#search")[0].reset()
+            filterBatch(batchNo)
+            alert(`已生成,批次号:${batchNo}`)
+        }).post()
+    }
+
+    function onVoidClick() {
+        const ids = table.selected().filter(it => it.state === 0).map(it => it.id)
+        if (ids.length === 0) {
+            alert("请先勾选没有使用的兑换码")
+            return
+        }
+        confirmDo(`确定要作废勾选的${ids.length}个兑换码吗?作废之后不能恢复`, () => {
+            $.ajaxByData("/admin/api/vip_code/void").add("ids", ids.join(",")).success(() => table.load()).post()
+        })
+    }
+
+    /** 批次号输入框里的批次号 */
+    function inputBatchNo() {
+        const batchNo = $("#search input[name='batchNo']").val().trim()
+        if (batchNo === "") {
+            alert("请先在批次号里填写要操作的批次(点击列表里的批次号可以直接填写)")
+        }
+        return batchNo
+    }
+
+    function onVoidBatchClick() {
+        const batchNo = inputBatchNo()
+        if (batchNo === "") {
+            return
+        }
+        confirmDo(`确定要作废批次【${batchNo}】里所有没有使用的兑换码吗?作废之后不能恢复`, () => {
+            $.ajaxByData("/admin/api/vip_code/void_batch").add("batchNo", batchNo).success(() => table.load()).post()
+        })
+    }
+
+    /** 导出一个批次的兑换码(CSV文件,Excel可以直接打开) */
+    function onExportClick() {
+        const batchNo = inputBatchNo()
+        if (batchNo === "") {
+            return
+        }
+        $.ajaxByData("/admin/api/vip_code/export").add("batchNo", batchNo).success(list => {
+            //卡号、卡密前面加制表符,Excel才会当成文本(否则16位数字会变成科学计数法)
+            const lines = ["卡号,卡密,VIP时长,有效期,状态"]
+            list.forEach(it => {
+                lines.push(`\t${it.cardNo},\t${it.cardPwd},${daysText(it.days)},${formatDate(it.expireTime)},${CODE_STATES[it.state]}`)
+            })
+            const blob = new Blob(["﻿" + lines.join("\r\n")], {type: "text/csv;charset=utf-8"})
+            const a = document.createElement("a")
+            a.href = URL.createObjectURL(blob)
+            a.download = `VIP兑换码-${batchNo}.csv`
+            a.click()
+            URL.revokeObjectURL(a.href)
+        }).get()
+    }
+</script>
+</body>
+</html>
