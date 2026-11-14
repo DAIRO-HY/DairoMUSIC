@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>歌单列表</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="search" class="app-toolbar">
+            <input name="id" class="form-control" placeholder="歌单ID" type="number" style="width: 110px">
+            <input name="name" class="form-control" placeholder="歌单名" style="width: 180px">
+            <input name="userId" class="form-control" placeholder="会员ID" type="number" style="width: 110px">
+            <select name="home" class="form-select" style="width: 150px">
+                <option value="">全部歌单</option>
+                <option value="1">首页使用的</option>
+            </select>
+            <div class="form-check form-switch ms-1">
+                <input class="form-check-input" type="checkbox" role="switch" id="adminOnly">
+                <label class="form-check-label" for="adminOnly">只看归管理员的</label>
+            </div>
+        </form>
+        <div class="text-secondary small mb-2">会员在APP里创建的歌单。首页使用的歌单被会员删除时不会真正删除,而是归管理员,可以再分配给其他会员维护</div>
+        <form id="assignForm" class="alert alert-light border d-none" onsubmit="onAssignSubmit();return false;">
+            <div class="mb-2">把歌单【<span id="assignName" class="fw-medium"></span>】分配给:</div>
+            <div class="d-flex flex-wrap align-items-start gap-2">
+                <div><input name="user" class="form-control" placeholder="会员ID或邮箱" autocomplete="off" style="width: 260px"></div>
+                <button type="submit" class="btn btn-primary">分配</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="assign('0')">收回,归管理员</button>
+                <button type="button" class="btn btn-light" onclick="closeAssign()">取消</button>
+            </div>
+        </form>
+        <div id="table"></div>
+    </div>
+</main>
+<script>
+    /** 正在分配的歌单 */
+    let assigning = null
+
+    const table = new PageTable({
+        el: "#table",
+        url: "/admin/api/favorite/list",
+        search: "#search",
+        columns: [
+            {title: "", render: it => logoHtml(it.logoUrl)},
+            {title: "ID", data: "id", sortKey: "id"},
+            {title: "歌单名", render: it => ellipsis(it.name, 320), sortKey: "name"},
+            {title: "歌曲数", data: "musicCount", sortKey: "musicCount"},
+            {
+                title: "所属会员", sortKey: "userId", render: it => it.userId === 0
+                    ? badge("归管理员", "warning")
+                    : `<a href="/admin/user_edit.html?id=${it.userId}" class="text-decoration-none">${escapeHtml(it.userEmail || "没有邮箱")}</a> <span class="text-secondary small">ID:${it.userId}</span>`
+            },
+            {title: "首页", render: it => it.homeCount > 0 ? badge("使用中", "success") : "", sortKey: "homeCount"},
+            {title: "创建时间", render: it => formatTime(it.date), sortKey: "date", className: "text-nowrap"}
+        ],
+        actions: [
+            {icon: "bi-person-gear", title: "分配给会员", onClick: it => openAssign(it)},
+            {
+                icon: "bi-trash3", title: "删除", danger: true, show: it => it.userId === 0 && it.homeCount === 0,
+                onClick: it => confirmDo(`确定要删除歌单【${it.name}】吗?`, () => {
+                    $.ajaxByData("/admin/api/favorite/delete").add("id", it.id).success(() => table.load()).post()
+                })
+            }
+        ]
+    })
+    $(function () {
+        //只看归管理员的:会员ID固定为0
+        $("#adminOnly").on("change", function () {
+            $("input[name='userId']").val(this.checked ? "0" : "").prop("readonly", this.checked)
+        })
+        table.load()
+    })
+
+    function openAssign(item) {
+        assigning = item
+        $("#assignName").text(item.name)
+        $("#assignForm").removeClass("d-none").find("input[name='user']").val("").focus()
+    }
+
+    function closeAssign() {
+        assigning = null
+        $("#assignForm").addClass("d-none")
+    }
+
+    function onAssignSubmit() {
+        const user = $("#assignForm input[name='user']").val().trim()
+        if (user === "" || user === "0") {
+            alert("请输入会员ID或邮箱")
+            return
+        }
+        assign(user)
+    }
+
+    /**
+     * 修改歌单所属的会员,user为0时归管理员
+     */
+    function assign(user) {
+        $("#assignForm").ajaxByForm("/admin/api/favorite/assign").add("id", assigning.id).add("user", user).success(() => {
+            closeAssign()
+            table.load()
+        }).post()
+    }
+</script>
+</body>
+</html>

@@ -19,7 +19,11 @@ INSERT INTO admin_menu_bar (id, name, ico, url, parentId, orderNum) VALUES
 (12, '系统配置', NULL, '/admin/system_config.html', 10, 20),
 (13, 'DairoDFS配置', NULL, '/admin/dfs_config.html', 10, 30),
 (14, '采集服务配置', NULL, '/admin/search_config.html', 10, 40),
-(15, '依赖软件', NULL, '/admin/software.html', 10, 50);
+(15, '依赖软件', NULL, '/admin/software.html', 10, 50),
+(16, '发现页管理', 'compass-fill', NULL, 0, 50),
+(17, '轮播图', NULL, '/admin/swiper_list.html', 16, 10),
+(18, '推荐分组', NULL, '/admin/useful_list.html', 16, 20),
+(19, '歌单列表', NULL, '/admin/favorite_list.html', 16, 30);
 
 -- 超级管理员拥有所有菜单
 INSERT INTO admin_permission (roleId, menuId) SELECT 1, id FROM admin_menu_bar;

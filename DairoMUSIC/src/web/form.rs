@@ -202,6 +202,79 @@ pub struct MusicLrcEdit {
     pub state: i64,
 }
 
+/// 添加、修改轮播
+#[derive(Deserialize, Validate, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SwiperEdit {
+    // 轮播ID,0表示添加
+    #[serde(default)]
+    pub id: i64,
+
+    // 名称
+    #[validate(length(min = 1, max = 128, message = "名称不能为空,长度不能超过128位"))]
+    pub name: String,
+
+    // 图片的存储路径(上传图片后得到)
+    #[serde(default)]
+    #[validate(length(min = 1, max = 1024, message = "请上传图片"))]
+    pub image: String,
+
+    // 类型 1:推荐歌单 2:推荐单曲 3:拨打电话 4:跳转网页
+    pub swiper_type: i64,
+
+    // 数据:歌单ID、歌曲ID、电话号码、网址
+    #[serde(default)]
+    #[validate(length(max = 1024, message = "长度不能超过1024位"))]
+    pub data: String,
+
+    // 状态 0:禁用 1:启用
+    pub state: i64,
+
+    // 排序,越小越靠前
+    #[serde(default)]
+    pub sort: i64,
+}
+
+/// 添加、修改推荐分组
+#[derive(Deserialize, Validate, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct UsefulEdit {
+    // 分组ID,0表示添加
+    #[serde(default)]
+    pub id: i64,
+
+    // 分组名
+    #[serde(default)]
+    #[validate(length(max = 16, message = "分组名长度不能超过16位"))]
+    pub name: String,
+
+    // 显示方式 1:表格 2:横向滚动
+    pub show_type: i64,
+
+    // 歌单ID,逗号分隔,按显示顺序排列
+    #[serde(default)]
+    pub favorite_ids: String,
+
+    // 状态 0:禁用 1:启用
+    pub state: i64,
+
+    // 排序,越小越靠前
+    #[serde(default)]
+    pub sort: i64,
+}
+
+/// 修改歌单所属的会员
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FavoriteAssign {
+    // 歌单ID
+    pub id: i64,
+
+    // 会员ID或邮箱,空或0表示归管理员
+    #[serde(default)]
+    pub user: String,
+}
+
 /// 批量审核歌曲
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <script src="/static/js/picker.js"></script>
+    <meta name="menu" content="/admin/swiper_list.html">
+    <title>编辑轮播</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="form" class="app-form" action="/admin/api/swiper/edit" onsubmit="onSubmitClick();return false;">
+            <input type="hidden" name="id">
+            <div class="mb-3">
+                <label class="form-label">名称</label>
+                <input name="name" class="form-control" autocomplete="off" style="max-width: 420px">
+            </div>
+            <div class="mb-3">
+                <label class="form-label d-block">图片 <span class="text-secondary small">(JPG、PNG、WEBP)</span></label>
+                <div id="imagePreview" class="mb-2"></div>
+                <input id="imageFile" type="file" accept="image/jpeg,image/png,image/webp" class="d-none" onchange="onImageChange(this)">
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="$('#imageFile').click()"><i class="bi bi-image me-1"></i>上传图片</button>
+                <input type="hidden" name="image">
+                <div class="form-text">上传后自动居中裁切成 2.4:1,并缩小到 1920×800。APP里图片四角是圆角,底部中间有分页圆点,重要的内容请放在中间</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">点击后</label>
+                <select name="swiperType" class="form-select" style="max-width: 200px" onchange="onTypeChange()">
+                    <option value="1">打开歌单</option>
+                    <option value="2">播放歌曲</option>
+                    <option value="4">跳转网页</option>
+                    <option value="3">拨打电话</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label id="dataLabel" class="form-label"></label>
+                <div id="picked" class="mb-2"></div>
+                <div id="picker"></div>
+                <input id="dataText" class="form-control d-none" autocomplete="off" style="max-width: 420px">
+                <input type="hidden" name="data">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">排序号 <span class="text-secondary small">(越小越靠前)</span></label>
+                <input name="sort" class="form-control" type="number" style="max-width: 160px">
+            </div>
+            <div class="mb-4">
+                <label class="form-label d-block">状态</label>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="state" value="1" id="state1">
+                    <label class="form-check-label" for="state1">启用</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="state" value="0" id="state0">
+                    <label class="form-check-label" for="state0">禁用</label>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary px-4">保存</button>
+            <a class="btn btn-light ms-2" href="/admin/swiper_list.html">返回</a>
+        </form>
+    </div>
+</main>
+<script>
+    /** 每种类型选择内容的方式 */
+    const TYPES = {
+        1: {label: "歌单", url: "/admin/api/common/favorite_search", placeholder: "输入歌单名或歌单ID搜索"},
+        2: {label: "歌曲", url: "/admin/api/common/music_search", placeholder: "输入歌名、歌手或歌曲ID搜索"},
+        3: {label: "电话号码", placeholder: "电话号码"},
+        4: {label: "网址", placeholder: "https://"}
+    }
+
+    $(function () {
+        $.ajaxByData("/admin/api/swiper/detail").add("id", getParam("id", "0")).success(data => {
+            $("#form").bindValue(data)
+            showImage(data.imageUrl)
+            onTypeChange(data)
+        }).get()
+    })
+
+    function showImage(url) {
+        $("#imagePreview").html(url ? `<img src="${escapeHtml(url)}" class="swiper-preview" alt="">` : "")
+    }
+
+    /**
+     * 上传图片,保存时提交返回的存储路径
+     */
+    function onImageChange(input) {
+        const file = input.files[0]
+        input.value = ""
+        if (!file) {
+            return
+        }
+        const form = new FormData()
+        form.append("file", file)
+        $.ajax({url: "/admin/api/swiper/upload_image", method: "POST", data: form, processData: false, contentType: false})
+            .done(data => {
+                $("input[name='image']").val(data.path)
+                showImage(data.url)
+            })
+            .fail(xhr => alert(xhr.responseText || "上传失败"))
+    }
+
+    /**
+     * 类型改变:歌单、歌曲显示搜索选择,电话、网址显示输入框
+     * @param data 打开页面时的轮播数据,切换类型时不传(清空已经填的内容)
+     */
+    function onTypeChange(data) {
+        const type = parseInt($("select[name='swiperType']").val())
+        const config = TYPES[type]
+        const isPick = type <= 2
+        $("#dataLabel").text(config.label)
+        $("#picked").html("")
+        $("#picker").html("").toggleClass("d-none", !isPick)
+        $("#dataText").toggleClass("d-none", isPick).attr("placeholder", config.placeholder).val("")
+        if (!data) {
+            $("input[name='data']").val("")
+        }
+        if (isPick) {
+            new SearchPicker({el: "#picker", url: config.url, placeholder: config.placeholder, onPick: showPicked})
+            if (data && data.data && data.dataText != null) {
+                showPicked({id: data.data, name: data.dataText})
+            }
+        } else if (data) {
+            $("#dataText").val(data.data || "")
+        }
+    }
+
+    function showPicked(item) {
+        $("input[name='data']").val(item.id)
+        $("#picked").html(`<div class="picked-item">${pickItemHtml(item)}</div>`)
+    }
+
+    function onSubmitClick() {
+        if (parseInt($("select[name='swiperType']").val()) > 2) {
+            $("input[name='data']").val($("#dataText").val().trim())
+        }
+        $("#form").ajaxByForm().success(() => {
+            location.href = "/admin/swiper_list.html"
+        }).post()
+    }
+</script>
+</body>
+</html>

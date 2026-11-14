@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <script src="/static/js/picker.js"></script>
+    <meta name="menu" content="/admin/useful_list.html">
+    <title>编辑推荐分组</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="form" class="app-form" action="/admin/api/useful/edit" onsubmit="onSubmitClick();return false;">
+            <input type="hidden" name="id">
+            <div class="mb-3">
+                <label class="form-label">分组名 <span class="text-secondary small">(可以不填)</span></label>
+                <input name="name" class="form-control" autocomplete="off" maxlength="16" style="max-width: 280px">
+            </div>
+            <div class="mb-3">
+                <label class="form-label d-block">显示方式</label>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="showType" value="1" id="showType1">
+                    <label class="form-check-label" for="showType1">表格</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="showType" value="2" id="showType2">
+                    <label class="form-check-label" for="showType2">横向滚动</label>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">歌单 <span class="text-secondary small">(按下面的顺序显示)</span></label>
+                <div id="favorites" class="mb-2"></div>
+                <div id="picker"></div>
+                <input type="hidden" name="favoriteIds">
+                <div class="form-text">从会员的歌单里选择。会员删除被首页使用的歌单时,歌单不会真正删除,而是归管理员,可以在「歌单列表」里分配给其他会员维护</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">排序号 <span class="text-secondary small">(越小越靠前)</span></label>
+                <input name="sort" class="form-control" type="number" style="max-width: 160px">
+            </div>
+            <div class="mb-4">
+                <label class="form-label d-block">状态</label>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="state" value="1" id="state1">
+                    <label class="form-check-label" for="state1">启用</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="state" value="0" id="state0">
+                    <label class="form-check-label" for="state0">禁用</label>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary px-4">保存</button>
+            <a class="btn btn-light ms-2" href="/admin/useful_list.html">返回</a>
+        </form>
+    </div>
+</main>
+<script>
+    /** 分组里的歌单,按显示顺序排列 */
+    let favorites = []
+
+    $(function () {
+        new SearchPicker({
+            el: "#picker", url: "/admin/api/common/favorite_search", placeholder: "输入歌单名或歌单ID搜索,点击添加", onPick: item => {
+                if (!favorites.some(it => it.id === item.id)) {
+                    favorites.push(item)
+                    renderFavorites()
+                }
+            }
+        })
+        $("#favorites").on("click", "[data-move]", e => {
+            const $btn = $(e.currentTarget)
+            const index = parseInt($btn.data("index"))
+            const move = parseInt($btn.data("move"))
+            const item = favorites.splice(index, 1)[0]
+
+            //move为0时移除,否则上移或下移
+            if (move !== 0) {
+                favorites.splice(index + move, 0, item)
+            }
+            renderFavorites()
+        })
+        $.ajaxByData("/admin/api/useful/detail").add("id", getParam("id", "0")).success(data => {
+            $("#form").bindValue(data)
+            favorites = data.favorites
+            renderFavorites()
+        }).get()
+    })
+
+    function renderFavorites() {
+        $("input[name='favoriteIds']").val(favorites.map(it => it.id).join(","))
+        if (favorites.length === 0) {
+            $("#favorites").html(`<div class="text-secondary small">还没有选择歌单</div>`)
+            return
+        }
+        const last = favorites.length - 1
+        $("#favorites").html(favorites.map((it, i) => `<div class="picked-item">
+            ${pickItemHtml(it)}
+            <span class="ms-auto text-nowrap">
+                <button type="button" class="btn btn-sm btn-link px-1" data-move="-1" data-index="${i}" title="上移" ${i === 0 ? "disabled" : ""}><i class="bi bi-arrow-up"></i></button>
+                <button type="button" class="btn btn-sm btn-link px-1" data-move="1" data-index="${i}" title="下移" ${i === last ? "disabled" : ""}><i class="bi bi-arrow-down"></i></button>
+                <button type="button" class="btn btn-sm btn-link px-1 text-danger" data-move="0" data-index="${i}" title="移除"><i class="bi bi-x-lg"></i></button>
+            </span>
+        </div>`).join(""))
+    }
+
+    function onSubmitClick() {
+        $("#form").ajaxByForm().success(() => {
+            location.href = "/admin/useful_list.html"
+        }).post()
+    }
+</script>
+</body>
+</html>

@@ -170,7 +170,7 @@
 | `POST /api/favorite/add` | `name` | 新建歌单,返回歌单ID |
 | `POST /api/favorite/edit` | `id`、`name`、`description` | 修改歌单 |
 | `POST /api/favorite/logo` | multipart:`id`、`file` | 上传封面,返回封面地址 |
-| `DELETE /api/favorite/delete` | `id` | 删除歌单 |
+| `DELETE /api/favorite/delete` | `id` | 删除歌单。首页(推荐分组、轮播)正在使用的歌单不会真正删除,只是不再属于这个会员(从"我的歌单"里消失,首页继续显示) |
 | `POST /api/favorite/sort` | `ids`(排好序的歌单ID,逗号分隔) | 歌单排序 |
 | `GET /api/favorite/musics` | `id` | 歌单里的歌曲,最近添加的在前面 |
 | `GET /api/favorite/all_musics` | | 我所有歌单里的歌曲 |
@@ -184,6 +184,7 @@
 
 ### GET /api/home/useful
 推荐歌单分组 `[{name, type, favorites:[歌单]}]`。`type`:1:表格显示 2:横向滚动。表格每行显示几个由客户端决定。
+歌单是后台从会员的歌单里选出来的,由所属的会员维护:歌单的 `isMine` 为 true 时当前会员可以编辑,否则只能查看。
 
 ## 其他
 

@@ -177,7 +177,12 @@ pub async fn delete(login: Ext<LoginUser>, id: i64) -> Result<(), BizError> {
     if favorite.likeFlag == 1 {
         return Err(biz_error!("这个歌单不能删除"));
     }
-    user_favorite_dao::set_deleted(&mut ctx, id, time_util::current_millis()).await?;
+    if user_favorite_dao::count_referenced(&mut ctx, id.to_string()).await? > 0 {
+        //首页的推荐分组、轮播正在使用的歌单不能真正删除,改为归管理员(所属会员ID为0),管理员可以再分配给其他会员维护
+        user_favorite_dao::set_owner(&mut ctx, id, 0).await?;
+    } else {
+        user_favorite_dao::set_deleted(&mut ctx, id, time_util::current_millis()).await?;
+    }
     ctx.commit().await?;
     Ok(())
 }

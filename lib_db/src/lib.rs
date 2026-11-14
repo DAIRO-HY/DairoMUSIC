@@ -12,7 +12,7 @@ use std::time::Duration;
 struct Assets;
 
 /// 数据库版本号
-const VERSION: i32 = 6;
+const VERSION: i32 = 7;
 
 /// 数据库文件名
 pub const DB_FILE_NAME: &str = "dairo-music.sqlite";
@@ -87,6 +87,22 @@ const UPGRADE_V6: &str = "
 alter table music rename column state to collectState;
 DROP INDEX idx_music_state;
 CREATE INDEX idx_music_collected ON music (collectState);
+";
+
+/// 版本6升级到版本7:增加「发现页管理」菜单(轮播图、推荐分组、歌单列表),超级管理员拥有这些菜单
+const UPGRADE_V7: &str = "
+INSERT INTO admin_menu_bar (name, ico, url, parentId, orderNum)
+SELECT '发现页管理', 'compass-fill', NULL, 0, 50
+WHERE NOT EXISTS (SELECT 1 FROM admin_menu_bar WHERE name = '发现页管理' AND parentId = 0);
+INSERT INTO admin_menu_bar (name, ico, url, parentId, orderNum)
+SELECT it.name, NULL, it.url, (SELECT id FROM admin_menu_bar WHERE name = '发现页管理' AND parentId = 0), it.orderNum
+FROM (SELECT '轮播图' AS name, '/admin/swiper_list.html' AS url, 10 AS orderNum
+      UNION ALL SELECT '推荐分组', '/admin/useful_list.html', 20
+      UNION ALL SELECT '歌单列表', '/admin/favorite_list.html', 30) it
+WHERE NOT EXISTS (SELECT 1 FROM admin_menu_bar m WHERE m.url = it.url);
+INSERT OR IGNORE INTO admin_permission (roleId, menuId)
+SELECT 1, id FROM admin_menu_bar
+WHERE (name = '发现页管理' AND parentId = 0) OR url IN ('/admin/swiper_list.html', '/admin/useful_list.html', '/admin/favorite_list.html');
 ";
 
 /// 全新安装时的初始数据(菜单、超级管理员角色)
@@ -206,6 +222,11 @@ async fn upgrade(with_init_data: bool) -> Result<(), Box<dyn Error>> {
         if version < 6 {
             let mut tx = (&mut *conn).begin().await?;
             sqlx::raw_sql(UPGRADE_V6).execute(&mut *tx).await?;
+            tx.commit().await?;
+        }
+        if version < 7 {
+            let mut tx = (&mut *conn).begin().await?;
+            sqlx::raw_sql(UPGRADE_V7).execute(&mut *tx).await?;
             tx.commit().await?;
         }
     }

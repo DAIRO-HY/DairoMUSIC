@@ -1,6 +1,9 @@
 pub mod admin;
 pub mod common;
 pub mod dfs_config;
+pub mod favorite;
+pub mod swiper;
+pub mod useful;
 pub mod install;
 pub mod login;
 pub mod menu;

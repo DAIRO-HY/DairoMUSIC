@@ -203,3 +203,30 @@ pub async fn cover(source: &Path) -> Result<Vec<u8>, String> {
     }
     Ok(data)
 }
+
+/// 把图片居中裁切成指定的宽高比,并缩小到指定的宽度(比指定宽度小的图片不放大),转换成JPG
+/// - source 图片文件
+/// - width、height 目标分辨率,宽高比按这个分辨率计算
+pub async fn crop_image(source: &Path, width: u32, height: u32) -> Result<Vec<u8>, String> {
+    let source = source.to_string_lossy();
+
+    //先按比例居中裁切,再缩小;-2表示高度按比例计算并取偶数
+    let filter = format!(
+        "crop='min(iw,ih*{w}/{h})':'min(ih,iw*{h}/{w})',scale='min({w},iw)':-2:flags=lanczos",
+        w = width,
+        h = height
+    );
+    let data = run(
+        &ffmpeg(),
+        &[
+            "-v", "error", "-i", &source, "-an", "-map", "0:v:0", "-frames:v", "1", "-vf", &filter, "-pix_fmt", "yuvj420p", "-c:v", "mjpeg", "-q:v",
+            "4", "-f", "image2pipe", "-",
+        ],
+        PROBE_TIMEOUT,
+    )
+    .await?;
+    if data.is_empty() {
+        return Err("图片处理失败".to_string());
+    }
+    Ok(data)
+}

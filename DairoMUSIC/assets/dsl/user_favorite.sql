@@ -74,3 +74,66 @@ select * from user_favorite where isDelete = 0
 -- @each ids seq="," open="and id in (" close=")" item="id"
 :id
 -- @end
+
+
+-- ------------------------------
+
+-- 歌单被首页的推荐分组、轮播使用的次数(包括禁用的分组和轮播)
+-- @name count_referenced
+-- @param id_text:String 歌单ID的文本
+-- @return i64
+select (select count(*) from useful where (',' || favoriteIds || ',') like '%,' || :id_text || ',%')
+     + (select count(*) from swiper where swiperType = 1 and data = :id_text);
+
+-- ------------------------------
+
+-- 修改歌单所属的会员(0:归管理员)
+-- @name set_owner
+-- @param id:i64
+-- @param user_id:i64
+update user_favorite set userId = :user_id, sort = 0 where id = :id;
+
+-- ------------------------------
+
+-- 后台的歌单列表(分页,不包括已删除的歌单和"我喜欢")
+-- @name page_admin
+-- @page
+-- @param id:i64?
+-- @param name:String? 歌单名(模糊匹配)
+-- @param user_id:i64? 所属会员ID,0:归管理员
+-- @param home:i64? 1:只看首页使用的歌单
+select f.id, f.name, f.logo, f.musicCount, f.userId, f.date,
+       (select u.email from user u where u.id = f.userId) as userEmail,
+       (select count(*) from useful where (',' || favoriteIds || ',') like '%,' || f.id || ',%')
+           + (select count(*) from swiper where swiperType = 1 and data = cast(f.id as text)) as homeCount
+from user_favorite f
+where f.isDelete = 0 and f.likeFlag = 0
+-- @if id != null
+and f.id = :id
+-- @end
+-- @if name != null
+and f.name like '%' || :name || '%'
+-- @end
+-- @if user_id != null
+and f.userId = :user_id
+-- @end
+-- @if home != null
+and ((select count(*) from useful where (',' || favoriteIds || ',') like '%,' || f.id || ',%')
+    + (select count(*) from swiper where swiperType = 1 and data = cast(f.id as text))) > 0
+-- @end
+
+-- ------------------------------
+
+-- 后台选择歌单时搜索(歌单名包含关键词,或者ID相同),最多20个
+-- @name search_admin
+-- @param key:String?
+-- @param id:i64 关键词是数字时的歌单ID,不是数字时为0
+-- @return List<SearchAdminTemp>
+select f.id, f.name, f.logo, f.musicCount, f.userId,
+       (select u.email from user u where u.id = f.userId) as userEmail
+from user_favorite f
+where f.isDelete = 0 and f.likeFlag = 0
+-- @if key != null
+and (f.name like '%' || :key || '%' or f.id = :id)
+-- @end
+order by f.id desc limit 20

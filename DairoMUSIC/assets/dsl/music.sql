@@ -232,3 +232,17 @@ limit 1;
 -- @param now:i64
 update music set videoState = 3, videoTime = :now
 where videoState = 1 and id not in (select musicId from music_collect where platform = :platform);
+
+
+-- ------------------------------
+
+-- 后台选择歌曲时搜索(歌名、歌手包含关键词,或者ID相同),只包括采集完成、没有删除的歌曲,最多20首
+-- @name search_admin
+-- @param key:String?
+-- @param id:i64 关键词是数字时的歌曲ID,不是数字时为0
+-- @return List<Music>
+select * from music where deleteFlag = 0 and collectState = 100
+-- @if key != null
+and (name like '%' || :key || '%' or artist like '%' || :key || '%' or id = :id)
+-- @end
+order by id desc limit 20
