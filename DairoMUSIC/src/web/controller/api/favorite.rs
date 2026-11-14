@@ -3,6 +3,7 @@
 use crate::dao::user_favorite_dao::UserFavorite;
 use crate::dao::user_music_dao::{FavoriteMusicTemp, UserMusic};
 use crate::dao::{music_dao, music_file_dao, user_favorite_dao, user_music_dao};
+use crate::service::image_service::{self, TEMP_LOGO_PREFIX};
 use crate::service::{dfs_service, vip_service};
 use crate::service::music_service::{self, MusicVo};
 use crate::util::time_util;
@@ -18,12 +19,8 @@ use serde::Serialize;
 use sqlx_context::DbContext;
 use validator::Validate;
 
-
 /// 歌单最多的歌曲数
 const MAX_MUSIC_COUNT: i64 = 10000;
-
-/// 封面是用歌单里的歌曲封面自动设置的(前缀)
-const TEMP_LOGO_PREFIX: &str = "temp:";
 
 /// 歌单
 #[derive(Serialize)]
@@ -163,9 +160,10 @@ pub struct LogoUpload {
 #[POST("/api/favorite/logo")]
 pub async fn logo(login: Ext<LoginUser>, form: LogoUpload) -> Result<Option<String>, BizError> {
     let mut ctx = lib_db::get_context();
-    get_my_favorite(&mut ctx, form.id, &login).await?;
+    let favorite = get_my_favorite(&mut ctx, form.id, &login).await?;
     let path = upload_image(form.file).await?;
     user_favorite_dao::update_logo(&mut ctx, form.id, Some(path.clone())).await?;
+    image_service::remove_replaced(favorite.logo, Some(&path));
     Ok(dfs_service::file_url(Some(&path)))
 }
 

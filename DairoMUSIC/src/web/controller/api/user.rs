@@ -2,7 +2,7 @@
 
 use crate::dao::{user_dao, user_login_dao};
 use crate::service::vip_service::{self, VipVo};
-use crate::service::{config_service, dfs_service, email_service, user_service};
+use crate::service::{config_service, dfs_service, email_service, image_service, user_service};
 use crate::util::{ffmpeg_util, image_util, pwd_util, request_util, time_util};
 use crate::web::biz_error::BizError;
 use crate::web::filter::user_auth::{self, LoginUser};
@@ -244,7 +244,9 @@ pub struct AvatarUpload {
 pub async fn avatar(login: Ext<LoginUser>, form: AvatarUpload) -> Result<Option<String>, BizError> {
     let path = upload_image(form.file).await?;
     let mut ctx = lib_db::get_context();
+    let old = user_dao::select_one(&mut ctx, login.id).await?.logo;
     user_dao::update_logo(&mut ctx, login.id, Some(path.clone())).await?;
+    image_service::remove_replaced(old, Some(&path));
     Ok(dfs_service::file_url(Some(&path)))
 }
 

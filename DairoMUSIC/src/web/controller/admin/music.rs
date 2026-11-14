@@ -385,11 +385,12 @@ pub struct LogoUpload {
 #[POST("/admin/api/music/upload_logo")]
 pub async fn upload_logo(form: LogoUpload) -> Result<Option<String>, BizError> {
     let mut ctx = lib_db::get_context();
-    if music_dao::select_one(&mut ctx, form.id).await.is_err() {
+    let Ok(music) = music_dao::select_one(&mut ctx, form.id).await else {
         return Err(biz_error!("歌曲不存在"));
-    }
+    };
     let path = crate::web::controller::api::user::upload_image(form.file).await?;
     music_dao::update_logo(&mut ctx, form.id, Some(path.clone())).await?;
+    crate::service::image_service::remove_replaced(music.logo, Some(&path));
     Ok(dfs_service::file_url(Some(&path)))
 }
 

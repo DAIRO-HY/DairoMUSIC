@@ -195,6 +195,8 @@ pub async fn edit(form: form::SwiperEdit) -> Result<(), BizError> {
         }
         _ => return Err(BizError::field("swiperType", "类型不正确")),
     }
+    let mut old_image = None;
+    let mut new_image = String::new();
     if form.id == 0 {
         let swiper = Swiper {
             name: form.name.trim().to_string(),
@@ -211,15 +213,19 @@ pub async fn edit(form: form::SwiperEdit) -> Result<(), BizError> {
         let Ok(mut swiper) = swiper_dao::select_one(&mut ctx, form.id).await else {
             return Err(biz_error!("轮播不存在"));
         };
+        old_image = Some(std::mem::replace(&mut swiper.image, form.image));
         swiper.name = form.name.trim().to_string();
-        swiper.image = form.image;
         swiper.data = Some(data);
         swiper.swiperType = form.swiper_type;
         swiper.state = form.state;
         swiper.sort = form.sort;
+        new_image = swiper.image.clone();
         swiper_dao::update(&mut ctx, &swiper).await?;
     }
     ctx.commit().await?;
+
+    //换了图片时,旧图片从DairoDFS删除
+    crate::service::image_service::remove_replaced(old_image, Some(&new_image));
     Ok(())
 }
 

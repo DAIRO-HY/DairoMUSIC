@@ -221,6 +221,19 @@ pub async fn upload_file(file: &std::path::Path, md5: &str, path: &str, content_
     }
 }
 
+/// 按存储路径删除文件(进DFS的回收站,到期后由DFS自动清理),文件不存在时也算成功
+/// - path 存储路径,如 /image/logo/2024/xxx.jpg
+pub async fn delete(path: &str) -> Result<(), DfsError> {
+    let res = CLIENT
+        .delete(api_url("/api/files/delete_by_path"))
+        .query(&[("paths", path)])
+        .timeout(Duration::from_secs(30));
+    match send(res).await? {
+        (StatusCode::OK, _) => Ok(()),
+        (status, body) => Err(DfsError(format!("删除失败({}): {}", status, body))),
+    }
+}
+
 /// 拼接DFS接口地址
 fn api_url(path: &str) -> String {
     format!("{}{}", api_base(&config_service::get()), path)

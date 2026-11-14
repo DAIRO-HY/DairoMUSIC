@@ -2,6 +2,7 @@
 
 use crate::dao::{music_dao, user_dao, user_favorite_dao};
 use crate::service::dfs_service;
+use crate::service::image_service::TEMP_LOGO_PREFIX;
 use crate::util::time_util;
 use crate::web::biz_error::BizError;
 use crate::web::form;
@@ -10,9 +11,6 @@ use crate::{biz_error, db};
 use hyperoute_core::Query;
 use hyperoute_macro::{GET, POST};
 use serde::Serialize;
-
-/// 封面是用歌单里的歌曲封面自动设置的(前缀)
-const TEMP_LOGO_PREFIX: &str = "temp:";
 
 /// 歌单
 #[derive(Serialize)]

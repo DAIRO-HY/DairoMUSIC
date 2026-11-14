@@ -10,7 +10,7 @@ use crate::dao::music_collect_dao::MusicCollect;
 use crate::dao::music_file_dao::MusicFile;
 use crate::dao::music_lrc_dao::MusicLrc;
 use crate::dao::{music_collect_dao, music_dao, music_file_dao, music_lrc_dao};
-use crate::service::{collect_service, dfs_service, music_service};
+use crate::service::{collect_service, dfs_service, image_service, music_service};
 use crate::util::ffmpeg_util::{self, AudioInfo};
 use crate::util::{image_util, time_util};
 use crate::web::controller::api::music_upload;
@@ -259,7 +259,7 @@ async fn process(collect: &MusicCollect, work_dir: &Path) -> Result<String, Stri
         name,
         artist: info.artist.clone().or(music.artist.clone()),
         album: info.album.clone().or(music.album.clone()),
-        logo: logo.or(old_logo),
+        logo: logo.clone().or(old_logo.clone()),
         duration: info.duration,
         year: info.year.or(music.year),
         max_bit_rate,
@@ -276,6 +276,11 @@ async fn process(collect: &MusicCollect, work_dir: &Path) -> Result<String, Stri
         music_lrc_dao::insert(&mut ctx, &lrc).await.map_err(|e| e.to_string())?;
     }
     ctx.commit().await.map_err(|e| e.to_string())?;
+
+    //重新处理时保存了新的封面,旧封面从DairoDFS删除
+    if logo.is_some() {
+        image_service::remove_replaced(old_logo, logo.as_deref());
+    }
     Ok(format!("采集成功,{}个文件", music_files.len()))
 }
 

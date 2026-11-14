@@ -254,3 +254,16 @@ select * from music where deleteFlag = 0 and collectState = 100
 and (name like '%' || :key || '%' or artist like '%' || :key || '%' or id = :id)
 -- @end
 order by id desc limit 20
+
+
+-- ------------------------------
+
+-- 图片被使用的次数(歌曲封面、会员头像、歌单封面、轮播图),用来判断旧图片能不能从DairoDFS删除
+-- @name count_image_used
+-- @param path:String 图片的存储路径
+-- @param temp_path:String 歌单自动使用歌曲封面时保存的值(temp:存储路径)
+-- @return i64
+select (select count(*) from music where logo = :path)
+     + (select count(*) from user where logo = :path)
+     + (select count(*) from user_favorite where logo = :path or logo = :temp_path)
+     + (select count(*) from swiper where image = :path);
