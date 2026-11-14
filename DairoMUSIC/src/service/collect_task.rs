@@ -229,9 +229,15 @@ async fn process(collect: &MusicCollect, work_dir: &Path) -> Result<String, Stri
         music_files.push(upload(collect.musicId, file, &info).await?);
     }
 
-    //封面:优先使用文件里的图片,没有时下载采集平台的封面
+    //封面:优先使用文件里的图片,没有时下载采集平台的封面;裁切、缩小之后保存到DairoDFS
     memo(collect, "保存封面").await;
     let logo = save_cover(&source, &info, music.logo.as_deref()).await;
+
+    //封面只使用DairoDFS里的图片,不使用采集平台的地址(保存失败时没有封面,重新处理之前已经保存过的继续使用)
+    let old_logo = music.logo.clone().filter(|it| !is_url(it));
+    if logo.is_none() && old_logo.is_none() && music.logo.is_some() {
+        eprintln!("-->封面保存失败,歌曲{}没有封面", collect.musicId);
+    }
 
     //歌词
     let lrc = if is_youtube { get_lrc(&extra).await } else { None };
@@ -253,7 +259,7 @@ async fn process(collect: &MusicCollect, work_dir: &Path) -> Result<String, Stri
         name,
         artist: info.artist.clone().or(music.artist.clone()),
         album: info.album.clone().or(music.album.clone()),
-        logo: logo.or(music.logo.clone()),
+        logo: logo.or(old_logo),
         duration: info.duration,
         year: info.year.or(music.year),
         max_bit_rate,
@@ -409,7 +415,16 @@ pub(crate) async fn download(url: &str, path: &Path, max_size: u64) -> Result<()
     Ok(())
 }
 
+/// 是不是网址(采集平台的封面)
+fn is_url(text: &str) -> bool {
+    text.starts_with("http://") || text.starts_with("https://")
+}
+
+/// 采集平台的封面允许的最大大小
+const COVER_MAX_SIZE: usize = 50 * 1024 * 1024;
+
 /// 保存封面到DairoDFS,返回存储路径;没有封面或者失败时返回None
+/// 和后台、APP上传的图片一样,居中裁切成正方形并缩小到800x800,转换成JPG
 /// - current_logo 歌曲当前的封面(采集平台的封面是网址)
 async fn save_cover(source: &Path, info: &AudioInfo, current_logo: Option<&str>) -> Option<String> {
     let data = if info.has_cover {
@@ -421,22 +436,29 @@ async fn save_cover(source: &Path, info: &AudioInfo, current_logo: Option<&str>)
         Some(data) => data,
         None => {
             //下载采集平台的封面
-            let url = current_logo.filter(|it| it.starts_with("http://") || it.starts_with("https://"))?;
+            let url = current_logo.filter(|it| is_url(it))?;
             let url = collect_service::to_internal_url(url);
             let res = CLIENT.get(url).timeout(Duration::from_secs(20)).send().await.ok()?;
             if !res.status().is_success() {
                 return None;
             }
             let data = res.bytes().await.ok()?;
-            if data.len() > 10 * 1024 * 1024 {
+            if data.len() > COVER_MAX_SIZE {
                 return None;
             }
             data.to_vec()
         }
     };
-    let ext = image_util::image_ext(&data)?;
+    image_util::image_ext(&data)?;
+    let data = match ffmpeg_util::crop_image_data(data, ffmpeg_util::LOGO_SIZE, ffmpeg_util::LOGO_SIZE).await {
+        Ok(it) => it,
+        Err(e) => {
+            eprintln!("-->封面处理失败: {}", e);
+            return None;
+        }
+    };
     let name = Alphanumeric.sample_string(&mut rand::rng(), 16);
-    let path = format!("/image/logo/{}/{}.{}", time_util::current_year(), name, ext);
+    let path = format!("/image/logo/{}/{}.jpg", time_util::current_year(), name);
     match dfs_service::upload(data, &path, "").await {
         Ok(_) => Some(path),
         Err(e) => {
