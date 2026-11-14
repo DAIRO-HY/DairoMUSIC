@@ -237,6 +237,7 @@ fn to_music_list(list: Vec<FavoriteMusicTemp>, files: &[crate::dao::music_file_d
                 video_state: it.videoState,
                 favorite_id: Some(it.favoriteId),
                 play_count: None,
+                audit_state: None,
                 files: music_service::files_of(&file_map, it.id, vip_limited),
                 collect: music_service::collect_vo(it.platform, it.extra),
             }

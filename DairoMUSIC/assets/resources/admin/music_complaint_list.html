@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>歌曲投诉</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="search" class="app-toolbar">
+            <select name="state" class="form-select" style="width: 130px">
+                <option value="">全部状态</option>
+                <option value="0" selected>未处理</option>
+                <option value="1">已处理</option>
+            </select>
+            <input name="musicId" class="form-control" placeholder="歌曲ID" type="number" style="width: 120px">
+            <input name="userId" class="form-control" placeholder="会员ID" type="number" style="width: 120px">
+        </form>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <span class="text-secondary small">勾选的投诉:</span>
+            <button type="button" class="btn btn-outline-success btn-sm" onclick="onHandleClick()"><i class="bi bi-check-lg me-1"></i>标记为已处理</button>
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="onRefuseClick()"><i class="bi bi-slash-circle me-1"></i>拒绝歌曲</button>
+            <span class="text-secondary small">拒绝歌曲:把歌曲的审核状态改成拒绝(APP搜索不显示),这首歌的投诉全部标记为已处理</span>
+        </div>
+        <div id="table"></div>
+    </div>
+</main>
+<script>
+    function musicHtml(it) {
+        if (it.musicDeleteFlag == null) {
+            return `<span class="text-secondary">歌曲不存在</span> <span class="text-secondary small">ID:${it.musicId}</span>`
+        }
+        return `<a href="/admin/music_edit.html?id=${it.musicId}" class="text-decoration-none">${ellipsis(it.musicName || "(没有歌名)", 240)}</a>
+            <div class="text-secondary small">${it.musicArtist ? escapeHtml(it.musicArtist) + " · " : ""}ID:${it.musicId}${it.musicDeleteFlag === 1 ? " " + badge("已删除", "danger") : ""}</div>`
+    }
+
+    function userHtml(it) {
+        return `<a href="/admin/user_edit.html?id=${it.userId}" class="text-decoration-none">${escapeHtml(it.userEmail || "没有邮箱")}</a>
+            <div class="text-secondary small">ID:${it.userId}</div>`
+    }
+
+    /** 这首歌被投诉的次数,点击只看这首歌的投诉 */
+    function countHtml(it) {
+        return `<a href="javascript:void(0)" class="text-decoration-none" onclick="filterMusic(${it.musicId})">${it.complaintCount}次</a>`
+    }
+
+    function handleHtml(it) {
+        if (it.state === 0) {
+            return ""
+        }
+        return `${it.handleTime ? formatTime(it.handleTime) : ""}<div class="text-secondary small">${escapeHtml(it.adminName || "")}</div>`
+    }
+
+    const table = new PageTable({
+        el: "#table",
+        url: "/admin/api/music_complaint/list",
+        search: "#search",
+        selectable: true,
+        columns: [
+            {title: "歌曲", render: it => musicHtml(it), sortKey: "musicId"},
+            {title: "歌曲审核", render: it => it.musicAuditState == null ? "" : auditStateBadge(it.musicAuditState), className: "text-nowrap"},
+            {title: "投诉内容", render: it => `<div style="max-width: 420px; white-space: normal; word-break: break-all">${escapeHtml(it.content)}</div>`},
+            {title: "被投诉", render: it => countHtml(it), className: "text-nowrap"},
+            {title: "投诉的会员", render: it => userHtml(it), sortKey: "userId"},
+            {title: "投诉时间", render: it => formatTime(it.date), sortKey: "date", className: "text-nowrap"},
+            {title: "状态", render: it => it.state === 0 ? badge("未处理", "primary") : badge("已处理", "success"), sortKey: "state", className: "text-nowrap"},
+            {title: "处理", render: it => handleHtml(it), sortKey: "handleTime", className: "text-nowrap"}
+        ],
+        actions: [
+            {icon: "bi-check-lg", title: "标记为已处理", show: it => it.state === 0, onClick: it => handle([it.id])},
+            {
+                icon: "bi-slash-circle", title: "拒绝歌曲", danger: true, show: it => it.musicDeleteFlag != null && it.musicAuditState !== 2,
+                onClick: it => confirmDo(`确定要拒绝歌曲【${it.musicName || it.musicId}】吗?拒绝之后APP搜索不显示这首歌`, () => refuse([it.id]))
+            }
+        ]
+    })
+    $(function () {
+        //从其他页面带着歌曲ID过来时,显示这首歌所有的投诉
+        const musicId = getParam("musicId")
+        if (musicId) {
+            $("#search input[name='musicId']").val(musicId)
+            $("#search select[name='state']").val("")
+        }
+        table.load()
+    })
+
+    /** 只看某首歌的投诉 */
+    function filterMusic(musicId) {
+        $("#search input[name='musicId']").val(musicId)
+        $("#search select[name='state']").val("")
+        table.load(1)
+    }
+
+    function onHandleClick() {
+        const ids = table.selected().filter(it => it.state === 0).map(it => it.id)
+        if (ids.length === 0) {
+            alert("请先勾选还没有处理的投诉")
+            return
+        }
+        handle(ids)
+    }
+
+    function onRefuseClick() {
+        const list = table.selected().filter(it => it.musicDeleteFlag != null)
+        if (list.length === 0) {
+            alert("请先勾选投诉")
+            return
+        }
+        const count = new Set(list.map(it => it.musicId)).size
+        confirmDo(`确定要拒绝勾选的投诉里的${count}首歌曲吗?拒绝之后APP搜索不显示这些歌曲`, () => refuse(list.map(it => it.id)))
+    }
+
+    function handle(ids) {
+        $.ajaxByData("/admin/api/music_complaint/handle").add("ids", ids.join(",")).success(() => table.load()).post()
+    }
+
+    function refuse(ids) {
+        $.ajaxByData("/admin/api/music_complaint/refuse_music").add("ids", ids.join(",")).success(() => table.load()).post()
+    }
+</script>
+</body>
+</html>

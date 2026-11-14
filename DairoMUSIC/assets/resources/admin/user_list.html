@@ -48,7 +48,7 @@
             {title: "昵称", render: it => it.nick ? escapeHtml(it.nick) : `<span class="text-secondary">未设置</span>`},
             {title: "状态", render: it => USER_STATE[it.state] || "", sortKey: "state"},
             {title: "VIP", render: it => vipHtml(it), sortKey: "vipTime", className: "text-nowrap"},
-            {title: "信赖用户", render: it => yesNo(it.friendFlag)},
+            {title: "信任会员", render: it => yesNo(it.friendFlag)},
             {title: "临时用户", render: it => yesNo(it.tempFlag)},
             {title: "注册时间", render: it => formatTime(it.date), sortKey: "date", className: "text-nowrap"},
             {title: "最后在线", render: it => formatTime(it.lastLoginTime), sortKey: "lastLoginTime", className: "text-nowrap"}

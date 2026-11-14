@@ -12,7 +12,7 @@ CREATE TABLE user
     lastLoginTime INT8    NOT NULL default 0, -- 最后登录时间(毫秒)
     date          INT8    NOT NULL, -- 注册时间(毫秒)
     tempFlag      INTEGER NOT NULL default 0, -- 是否临时用户
-    friendFlag    INTEGER NOT NULL default 0, -- 是否信赖用户,拥有一些特殊权限
+    friendFlag    INTEGER NOT NULL default 0, -- 是否信任会员:纠错不需要审核,可以在APP里审核歌曲
     testFlag      INTEGER NOT NULL default 0, -- 应用市场审核专用的测试用户
     vipTime       INT8    NOT NULL default 0, -- VIP到期时间(毫秒),0:不是VIP
     vipForever    INTEGER NOT NULL default 0 -- 是否永久VIP

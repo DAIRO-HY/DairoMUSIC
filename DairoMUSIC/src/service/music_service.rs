@@ -32,6 +32,10 @@ pub struct MusicVo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub play_count: Option<i64>,
 
+    // 审核状态 0:待审核 1:通过 2:拒绝(只有信任会员获取歌曲详情时才有)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audit_state: Option<i64>,
+
     // 所有音质的文件,按比特率从低到高排序,还没有采集完成时为空数组
     pub files: Vec<FileVo>,
 

@@ -1,4 +1,4 @@
-use crate::dao::{admin_dao, admin_menu_bar_dao, admin_token_dao};
+use crate::dao::{admin_dao, admin_menu_bar_dao, admin_token_dao, music_complaint_dao, music_correct_dao};
 use crate::util::{pwd_util, request_util};
 use crate::web::biz_error::BizError;
 use crate::web::filter::auth::LoginAdmin;
@@ -65,6 +65,33 @@ pub async fn menu(login: Ext<LoginAdmin>) -> Result<Vec<Menu>, BizError> {
         .filter(|it| it.url.is_some() || !it.children.is_empty())
         .collect();
     Ok(menus)
+}
+
+/// 待处理的事项数量,没有对应页面权限的不返回
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Todo {
+    // 还没有处理的纠错数量
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub correct: Option<i64>,
+
+    // 还没有处理的投诉数量
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint: Option<i64>,
+}
+
+/// 首页显示的待处理事项:还没有处理的纠错、投诉数量
+#[GET("/admin/api/common/todo")]
+pub async fn todo(login: Ext<LoginAdmin>) -> Result<Todo, BizError> {
+    let mut ctx = lib_db::get_context();
+    let mut todo = Todo { correct: None, complaint: None };
+    if admin_menu_bar_dao::count_role_url(&mut ctx, login.role_id, "/admin/music_correct_list.html".to_string()).await? > 0 {
+        todo.correct = Some(music_correct_dao::count_pending(&mut ctx).await?);
+    }
+    if admin_menu_bar_dao::count_role_url(&mut ctx, login.role_id, "/admin/music_complaint_list.html".to_string()).await? > 0 {
+        todo.complaint = Some(music_complaint_dao::count_pending(&mut ctx).await?);
+    }
+    Ok(todo)
 }
 
 /// 获取当前登录的管理员信息

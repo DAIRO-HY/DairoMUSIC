@@ -1,3 +1,4 @@
+use crate::web::biz_error::BizError;
 use crate::dao::PageIn;
 use serde::{Deserialize, Serialize};
 
@@ -78,4 +79,28 @@ pub struct OptionItem {
 /// 空字符串当作没有输入
 pub fn non_empty(value: Option<String>) -> Option<String> {
     value.map(|it| it.trim().to_string()).filter(|it| !it.is_empty())
+}
+
+/// 解析逗号分隔的ID(去掉重复的)
+/// - name 提示里使用的名称,如"歌曲"
+/// - max 最多允许的数量
+pub fn parse_ids(ids: &str, name: &str, max: usize) -> Result<Vec<i64>, BizError> {
+    let mut list = Vec::new();
+    for it in ids.split(',').map(str::trim).filter(|it| !it.is_empty()) {
+        let Ok(id) = it.parse::<i64>() else {
+            return Err(BizError::msg(format!("{}ID格式错误", name)));
+        };
+        if !list.contains(&id) {
+            list.push(id);
+        }
+    }
+
+    //没有ID时批量更新的语句会更新所有数据,必须检查
+    if list.is_empty() {
+        return Err(BizError::msg(format!("请选择{}", name)));
+    }
+    if list.len() > max {
+        return Err(BizError::msg(format!("一次最多选择{}条{}", max, name)));
+    }
+    Ok(list)
 }

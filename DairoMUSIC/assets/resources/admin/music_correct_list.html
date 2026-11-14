@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <title>歌曲纠错</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="search" class="app-toolbar">
+            <select name="state" class="form-select" style="width: 130px">
+                <option value="">全部状态</option>
+                <option value="0" selected>未处理</option>
+                <option value="1">已同意</option>
+                <option value="2">已拒绝</option>
+            </select>
+            <input name="musicId" class="form-control" placeholder="歌曲ID" type="number" style="width: 120px">
+            <input name="userId" class="form-control" placeholder="会员ID" type="number" style="width: 120px">
+        </form>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <span class="text-secondary small">勾选的纠错:</span>
+            <button type="button" class="btn btn-outline-success btn-sm" onclick="onHandleClick(true)"><i class="bi bi-check-lg me-1"></i>同意</button>
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="onHandleClick(false)"><i class="bi bi-x-lg me-1"></i>拒绝</button>
+            <span class="text-secondary small">同意之后按纠错内容修改歌曲。信任会员提交的纠错不需要处理,直接生效</span>
+        </div>
+        <div id="table"></div>
+    </div>
+</main>
+<script>
+    const FIELD_NAMES = {name: "歌名", artist: "歌手", album: "专辑"}
+
+    /** 歌曲当前的值 */
+    const currentValue = (it, field) => ({name: it.musicName, artist: it.musicArtist, album: it.musicAlbum})[field]
+
+    const emptyText = value => value ? escapeHtml(value) : `<span class="text-secondary">(空)</span>`
+
+    /** 纠错内容:[{field, before, after}] */
+    function parseData(it) {
+        try {
+            return JSON.parse(it.data)
+        } catch (e) {
+            return []
+        }
+    }
+
+    /**
+     * 修改内容:每个字段一行,显示修改前 → 修改后
+     * 还没有处理,并且歌曲当前的值和提交时不一样(提交之后被修改过)时,另外显示当前的值
+     */
+    function changesHtml(it) {
+        const list = parseData(it)
+        if (list.length === 0) {
+            return `<span class="text-danger">内容格式不正确</span>`
+        }
+        return list.map(change => {
+            const current = currentValue(it, change.field)
+            const changed = it.state === 0 && it.musicDeleteFlag != null && (current || "") !== (change.before || "")
+            return `<div style="max-width: 560px; white-space: normal; word-break: break-all">
+                <span class="text-secondary">${FIELD_NAMES[change.field] || escapeHtml(change.field)}:</span>
+                <span class="text-decoration-line-through text-secondary">${emptyText(change.before)}</span>
+                <i class="bi bi-arrow-right mx-1"></i><span class="fw-medium text-success">${emptyText(change.after)}</span>
+                ${changed ? `<div class="small text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i>歌曲当前是:${emptyText(current)}</div>` : ""}
+            </div>`
+        }).join("")
+    }
+
+    function musicHtml(it) {
+        if (it.musicDeleteFlag == null) {
+            return `<span class="text-secondary">歌曲不存在</span> <span class="text-secondary small">ID:${it.musicId}</span>`
+        }
+        return `<a href="/admin/music_edit.html?id=${it.musicId}" class="text-decoration-none">${ellipsis(it.musicName || "(没有歌名)", 240)}</a>
+            <div class="text-secondary small">ID:${it.musicId}${it.musicDeleteFlag === 1 ? " " + badge("已删除", "danger") : ""}</div>`
+    }
+
+    function userHtml(it) {
+        return `<a href="/admin/user_edit.html?id=${it.userId}" class="text-decoration-none">${escapeHtml(it.userEmail || "没有邮箱")}</a>
+            <div class="text-secondary small">ID:${it.userId}</div>`
+    }
+
+    function stateHtml(it) {
+        if (it.state === 0) {
+            return badge("未处理", "primary")
+        }
+        if (it.state === 2) {
+            return badge("已拒绝", "danger")
+        }
+
+        //没有管理员的是信任会员提交的,直接生效
+        return badge("已同意", "success") + (it.adminId == null ? ` <span class="text-secondary small">信任会员</span>` : "")
+    }
+
+    function handleHtml(it) {
+        if (it.state === 0) {
+            return ""
+        }
+        return `${it.handleTime ? formatTime(it.handleTime) : ""}<div class="text-secondary small">${escapeHtml(it.adminName || "")}</div>`
+    }
+
+    const table = new PageTable({
+        el: "#table",
+        url: "/admin/api/music_correct/list",
+        search: "#search",
+        selectable: true,
+        columns: [
+            {title: "歌曲", render: it => musicHtml(it), sortKey: "musicId"},
+            {title: "修改内容", render: it => changesHtml(it)},
+            {title: "提交的会员", render: it => userHtml(it), sortKey: "userId"},
+            {title: "提交时间", render: it => formatTime(it.date), sortKey: "date", className: "text-nowrap"},
+            {title: "状态", render: it => stateHtml(it), sortKey: "state", className: "text-nowrap"},
+            {title: "处理", render: it => handleHtml(it), sortKey: "handleTime", className: "text-nowrap"}
+        ],
+        actions: [
+            {icon: "bi-check-lg", title: "同意", show: it => it.state === 0, onClick: it => handle([it.id], true)},
+            {icon: "bi-x-lg", title: "拒绝", danger: true, show: it => it.state === 0, onClick: it => handle([it.id], false)}
+        ]
+    })
+    $(function () {
+        //从其他页面带着歌曲ID过来时,显示这首歌所有的纠错
+        const musicId = getParam("musicId")
+        if (musicId) {
+            $("#search input[name='musicId']").val(musicId)
+            $("#search select[name='state']").val("")
+        }
+        table.load()
+    })
+
+    function onHandleClick(agree) {
+        const ids = table.selected().filter(it => it.state === 0).map(it => it.id)
+        if (ids.length === 0) {
+            alert("请先勾选还没有处理的纠错")
+            return
+        }
+        confirmDo(`确定要${agree ? "同意" : "拒绝"}勾选的${ids.length}条纠错吗?`, () => handle(ids, agree))
+    }
+
+    function handle(ids, agree) {
+        $.ajaxByData(`/admin/api/music_correct/${agree ? "agree" : "refuse"}`).add("ids", ids.join(",")).success(() => table.load()).post()
+    }
+</script>
+</body>
+</html>

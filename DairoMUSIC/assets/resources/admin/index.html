@@ -11,6 +11,33 @@
         <div class="app-card-title">欢迎回来</div>
         <div class="text-secondary">请从左侧菜单选择要管理的功能。</div>
     </div>
+    <div id="todo" class="app-card d-none">
+        <div class="app-card-title">待处理</div>
+        <div id="todoList" class="d-flex flex-wrap gap-3"></div>
+    </div>
 </main>
+<script>
+    /** 待处理的事项:接口只返回当前角色有权限的 */
+    const TODOS = [
+        {key: "correct", name: "歌曲纠错", icon: "bi-pencil-square", url: "/admin/music_correct_list.html"},
+        {key: "complaint", name: "歌曲投诉", icon: "bi-flag", url: "/admin/music_complaint_list.html"}
+    ]
+    $(function () {
+        $.ajaxByData("/admin/api/common/todo").success(data => {
+            const list = TODOS.filter(it => data[it.key] != null)
+            if (list.length === 0) {
+                return
+            }
+            $("#todoList").html(list.map(it => `<a href="${it.url}" class="text-decoration-none border rounded p-3 d-flex align-items-center gap-3" style="min-width: 200px">
+                <i class="bi ${it.icon} fs-3 ${data[it.key] > 0 ? "text-danger" : "text-secondary"}"></i>
+                <div>
+                    <div class="fs-4 fw-medium ${data[it.key] > 0 ? "text-danger" : "text-secondary"}">${data[it.key]}</div>
+                    <div class="text-secondary small">${it.name}</div>
+                </div>
+            </a>`).join(""))
+            $("#todo").removeClass("d-none")
+        }).get()
+    })
+</script>
 </body>
 </html>

@@ -149,7 +149,7 @@ pub struct UserEdit {
     // 状态 0:禁用 1:正常 2:注销
     pub state: i64,
 
-    // 是否信赖用户
+    // 是否信任会员
     #[serde(default)]
     pub friend_flag: i64,
 

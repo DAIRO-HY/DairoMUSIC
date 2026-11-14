@@ -57,7 +57,7 @@
 {"id": 1, "email": "邮箱,临时会员为null", "nick": "昵称", "logo": "头像地址", "isTemp": false, "isFriend": false,
  "vip": {"enable": true, "isVip": true, "forever": false, "expireTime": 1798084286000}}
 ```
-`isFriend` 为信赖用户,纠错直接生效。`vip` 见下面的"VIP"。
+`isFriend` 为信任会员(后台设置):纠错直接生效,可以查看、修改歌曲的审核状态,见下面的"信任会员"。`vip` 见下面的"VIP"。
 
 | 接口 | 需要登录 | 参数 | 说明 |
 |---|---|---|---|
@@ -108,6 +108,7 @@
 - `artist`、`album` 可能为 null,由客户端决定显示什么。
 - `favoriteId` 只有歌单里的歌曲才有。
 - `playCount` 播放次数,只有曲库的搜索结果(`/api/music/search`)才有。
+- `auditState` 审核状态,只有信任会员调用 `/api/music/detail` 时才有,其他情况没有这个字段。见下面的"信任会员"。
 - `files` 是这首歌所有音质的文件,按 `bitRate` 从低到高排序;空数组表示还没有采集完成,可以用 `collect.url` 播放。
 - 文件的 `vipOnly` 为 true 表示只有VIP才能听,这时 `url` 为 null。见下面的"VIP"。
 - 文件的 `id` 是文件ID,不会改变,可以用来做缓存的key(DairoDFS的地址变了也不影响)。
@@ -119,16 +120,27 @@
 |---|---|---|
 | `GET /api/music/search` | `key` | 从曲库搜索,最多30条,按匹配程度排序 |
 | `GET /api/music/search_collect` | `key` | 从采集平台搜索,结果的 `id` 为0,播放用 `collect.url`;要加入歌单时先调用 `collect` |
-| `GET /api/music/detail` | `id` | 歌曲详情 |
+| `GET /api/music/detail` | `id` | 歌曲详情;信任会员多返回 `auditState` |
 | `GET /api/music/video` | `id` | 歌曲视频,见下面的"视频" |
 | `GET /api/music/lrc` | `id` | 歌词列表 `[{id, musicId, title, lrc, agreeCount, disagreeCount, state, source}]` |
 | `POST /api/music/play` | `ids` | 提交播放记录,见下面的"播放次数" |
 | `POST /api/music/collect` | `name`、`logo`、`platform`、`extra` | 采集平台的歌曲加入曲库,返回歌曲ID(已经加入过时直接返回) |
-| `POST /api/music/correct` | `id`、`name`、`artist`、`album` | 纠错,只提交要修改的字段 |
+| `POST /api/music/correct` | `id`、`name`、`artist`、`album` | 纠错,只提交要修改的字段。信任会员提交的直接生效,其他会员的等后台处理 |
+| `POST /api/music/audit` | `id`、`auditState` | 信任会员审核歌曲,见下面的"信任会员" |
 | `POST /api/music/complaint` | `id`、`content` | 投诉 |
 | `GET /api/music/complaint_samples` | | 投诉理由的选项 |
 | `GET /api/music/upload/by_md5` | `md5` | 曲库里已经有这个文件时返回歌曲ID,没有时404 |
 | `POST /api/music/upload` | `name`(带扩展名的文件名,URL参数);请求体直接放文件内容 | 上传本地歌曲(mp3、flac、wav、ape、m4a、aac、ogg、wma,500MB以内),返回歌曲ID。后台处理完成之前 `files` 为空数组 |
+
+## 信任会员
+
+会员信息里 `isFriend` 为 true 的是信任会员,由后台设置。只有信任会员才有下面的功能,对其他会员要隐藏:
+
+- **纠错直接生效**:`POST /api/music/correct` 提交之后歌曲信息马上修改,不需要后台处理。
+- **查看审核状态**:`GET /api/music/detail` 多返回 `auditState`(0 待审核,1 通过,2 拒绝)。其他接口返回的歌曲没有这个字段,歌曲信息页要显示审核状态时请调用详情接口。
+- **审核歌曲**:`POST /api/music/audit`,参数 `id`、`auditState`(0、1、2)。不是信任会员时返回403;歌曲不存在时返回404。
+
+被拒绝(`auditState` 为2)的歌曲,所有人从曲库都搜索不到,已经在歌单里的不受影响。
 
 ## 播放次数
 

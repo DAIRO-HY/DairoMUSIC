@@ -74,6 +74,7 @@ pub async fn search(login: Ext<LoginUser>, key: String) -> Result<Vec<MusicVo>, 
                 duration: it.duration,
                 video_state: it.videoState,
                 play_count: Some(it.playCount),
+                audit_state: None,
                 files: music_service::files_of(&file_map, it.id, vip_limited),
                 ..Default::default()
             }
@@ -204,6 +205,9 @@ pub async fn detail(login: Ext<LoginUser>, id: i64) -> Result<MusicVo, BizError>
         video_state: music.videoState,
         favorite_id: None,
         play_count: None,
+
+        //审核状态只给信任会员看
+        audit_state: login.is_friend.then_some(music.auditState),
         files: music_service::file_vos(&files, vip_service::is_limited(&login)),
         collect: music_service::collect_vo(music.platform, music.extra),
     })
@@ -366,7 +370,33 @@ pub async fn video(login: Ext<LoginUser>, id: i64) -> Result<VideoVo, BizError> 
     Ok(result)
 }
 
-/// 纠正歌名、歌手、专辑;信赖用户提交的直接生效,其他用户的等后台处理
+/// 信任会员审核歌曲(审核状态在歌曲详情里返回)
+/// - audit_state 0:待审核 1:通过 2:拒绝(APP搜索不显示)
+#[POST("/api/music/audit")]
+pub async fn audit(login: Ext<LoginUser>, id: i64, audit_state: i64) -> Result<(), BizError> {
+    if !login.is_friend {
+        return Err(BizError::forbidden());
+    }
+    if !(0..=2).contains(&audit_state) {
+        return Err(biz_error!("审核状态不正确"));
+    }
+    let mut ctx = lib_db::get_context();
+    let Ok(music) = music_dao::select_one(&mut ctx, id).await else {
+        return Err(BizError::not_found());
+    };
+    if music.deleteFlag != 0 {
+        return Err(BizError::not_found());
+    }
+    if music.auditState != audit_state {
+        music_dao::set_audit_state(&mut ctx, vec![id], audit_state).await?;
+
+        //拒绝之后所有人都搜索不到这首歌,记录是谁修改的
+        println!("-->信任会员(ID:{})把歌曲(ID:{})的审核状态从{}改成了{}", login.id, id, music.auditState, audit_state);
+    }
+    Ok(())
+}
+
+/// 纠正歌名、歌手、专辑;信任会员提交的直接生效,其他会员的等后台处理
 #[POST("/api/music/correct")]
 pub async fn correct(login: Ext<LoginUser>, form: form::MusicCorrect) -> Result<(), BizError> {
     if let Err(e) = form.validate() {
@@ -395,12 +425,14 @@ pub async fn correct(login: Ext<LoginUser>, form: form::MusicCorrect) -> Result<
     if changes.is_empty() {
         return Ok(());
     }
+    let now = time_util::current_millis();
     let correct = MusicCorrect {
         musicId: form.id,
         data: serde_json::to_string(&changes).unwrap(),
         state: if login.is_friend { 1 } else { 0 },
         userId: login.id,
-        date: time_util::current_millis(),
+        date: now,
+        handleTime: login.is_friend.then_some(now),
         ..Default::default()
     };
     music_correct_dao::insert(&mut ctx, &correct).await?;

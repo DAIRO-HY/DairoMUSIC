@@ -19,7 +19,7 @@ pub struct LoginAdmin {
 /// 后台接口需要的页面权限:接口路径前缀 -> 菜单里的页面链接
 /// 角色有这个页面的菜单权限时才能调用对应的接口;不在这个列表里的接口只要登录就能调用
 /// 前缀有包含关系时,长的写在前面
-const API_PERMISSIONS: [(&str, &str); 16] = [
+const API_PERMISSIONS: [(&str, &str); 18] = [
     ("/admin/api/swiper/", "/admin/swiper_list.html"),
     ("/admin/api/useful/", "/admin/useful_list.html"),
     ("/admin/api/favorite/", "/admin/favorite_list.html"),
@@ -29,6 +29,8 @@ const API_PERMISSIONS: [(&str, &str); 16] = [
     ("/admin/api/user/", "/admin/user_list.html"),
     ("/admin/api/vip_code/", "/admin/vip_code_list.html"),
     ("/admin/api/music/", "/admin/music_list.html"),
+    ("/admin/api/music_correct/", "/admin/music_correct_list.html"),
+    ("/admin/api/music_complaint/", "/admin/music_complaint_list.html"),
     ("/admin/api/music_duplicate/", "/admin/music_duplicate_list.html"),
     ("/admin/api/system_config/", "/admin/system_config.html"),
     ("/admin/api/dfs_config/", "/admin/dfs_config.html"),

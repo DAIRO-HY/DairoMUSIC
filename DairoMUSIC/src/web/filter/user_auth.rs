@@ -21,7 +21,7 @@ pub struct LoginUser {
     // 是否临时会员
     pub is_temp: bool,
 
-    // 是否信赖用户
+    // 是否信任会员
     pub is_friend: bool,
 
     // 是否测试用户(应用市场审核用,只能看到测试歌曲)

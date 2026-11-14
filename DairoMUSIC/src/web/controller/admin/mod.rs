@@ -8,6 +8,8 @@ pub mod install;
 pub mod login;
 pub mod menu;
 pub mod music;
+pub mod music_complaint;
+pub mod music_correct;
 pub mod music_duplicate;
 pub mod role;
 pub mod search_config;

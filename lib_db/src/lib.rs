@@ -12,7 +12,7 @@ use std::time::Duration;
 struct Assets;
 
 /// 数据库版本号
-const VERSION: i32 = 8;
+const VERSION: i32 = 9;
 
 /// 数据库文件名
 pub const DB_FILE_NAME: &str = "dairo-music.sqlite";
@@ -116,6 +116,24 @@ WHERE EXISTS (SELECT 1 FROM admin_menu_bar WHERE url = '/admin/user_list.html')
   AND NOT EXISTS (SELECT 1 FROM admin_menu_bar WHERE url = '/admin/vip_code_list.html');
 INSERT OR IGNORE INTO admin_permission (roleId, menuId)
 SELECT 1, id FROM admin_menu_bar WHERE url = '/admin/vip_code_list.html';
+";
+
+/// 版本8升级到版本9:纠错、投诉增加处理时间,投诉增加处理的管理员;新增「歌曲纠错」「歌曲投诉」菜单
+const UPGRADE_V9: &str = "
+ALTER TABLE music_correct ADD COLUMN handleTime INT8;
+ALTER TABLE music_complaint ADD COLUMN adminId INT8;
+ALTER TABLE music_complaint ADD COLUMN handleTime INT8;
+CREATE INDEX idx_music_correct_music ON music_correct (musicId);
+CREATE INDEX idx_music_complaint_state ON music_complaint (state);
+CREATE INDEX idx_music_complaint_music ON music_complaint (musicId);
+INSERT INTO admin_menu_bar (name, ico, url, parentId, orderNum)
+SELECT it.name, NULL, it.url, (SELECT parentId FROM admin_menu_bar WHERE url = '/admin/music_list.html'), it.orderNum
+FROM (SELECT '歌曲纠错' AS name, '/admin/music_correct_list.html' AS url, 30 AS orderNum
+      UNION ALL SELECT '歌曲投诉', '/admin/music_complaint_list.html', 40) it
+WHERE EXISTS (SELECT 1 FROM admin_menu_bar WHERE url = '/admin/music_list.html')
+  AND NOT EXISTS (SELECT 1 FROM admin_menu_bar m WHERE m.url = it.url);
+INSERT OR IGNORE INTO admin_permission (roleId, menuId)
+SELECT 1, id FROM admin_menu_bar WHERE url IN ('/admin/music_correct_list.html', '/admin/music_complaint_list.html');
 ";
 
 /// 全新安装时的初始数据(菜单、超级管理员角色)
@@ -246,6 +264,11 @@ async fn upgrade(with_init_data: bool) -> Result<(), Box<dyn Error>> {
             let mut tx = (&mut *conn).begin().await?;
             sqlx::raw_sql(UPGRADE_V8).execute(&mut *tx).await?;
             execute_sql_file(&mut tx, "vip_code.sql").await?;
+            tx.commit().await?;
+        }
+        if version < 9 {
+            let mut tx = (&mut *conn).begin().await?;
+            sqlx::raw_sql(UPGRADE_V9).execute(&mut *tx).await?;
             tx.commit().await?;
         }
     }

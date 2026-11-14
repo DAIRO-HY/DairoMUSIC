@@ -45,7 +45,7 @@ pub struct UserInfo {
     // 是否临时会员(还没有绑定邮箱)
     pub is_temp: bool,
 
-    // 是否信赖用户(纠错直接生效)
+    // 是否信任会员(纠错直接生效,可以审核歌曲)
     pub is_friend: bool,
 
     // VIP状态
