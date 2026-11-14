@@ -139,7 +139,33 @@ check_and_upload_file(){
   upload_file $file_name
 }
 
+# 删除Release里原来的所有文件
+# Release:latest每次发布都是同一个,文件名里带版本号,不删除的话以前版本的文件会一直留在里面
+delete_all_assets(){
+  if [ -z "$release_id" ]; then
+    return
+  fi
+
+  #一次最多返回100个,多于100个时分几次删除
+  for i in 1 2 3 4 5; do
+    assets_json=$(curl -L \
+      -H "Accept: application/vnd.github+json" \
+      -H "Authorization: Bearer $github_token" \
+      -H "X-GitHub-Api-Version: 2026-03-10" \
+      "https://api.github.com/repos/${repo}/releases/${release_id}/assets?per_page=100")
+    asset_ids=$(echo "$assets_json" | jq -r 'if type=="array" then .[].id else empty end')
+    if [ -z "$asset_ids" ]; then
+      return
+    fi
+    for asset_id in $asset_ids; do
+      delete_asset $asset_id
+    done
+  done
+}
+
 #---------------------------------------上传编译好的二进制文件----------------------------------
+echo "正在删除Release:latest里原来的文件..."
+delete_all_assets
 check_and_upload_file "DairoMUSIC-linux-amd64-$version"
 check_and_upload_file "DairoMUSIC-linux-arm64-$version"
 check_and_upload_file "DairoMUSIC-mac-darwin-aarch64-$version"
