@@ -28,6 +28,10 @@ pub struct MusicVo {
     // 视频状态 0:未采集 1:采集中 2:有视频 3:没有视频(只有一张图片) 4:后台删除了视频 5:采集失败
     pub video_state: i64,
 
+    // 播放次数(只有曲库的搜索结果才有)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub play_count: Option<i64>,
+
     // 所有音质的文件,按比特率从低到高排序,还没有采集完成时为空数组
     pub files: Vec<FileVo>,
 

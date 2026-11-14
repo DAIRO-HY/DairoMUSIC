@@ -25,6 +25,9 @@ const SOURCE_COLLECT: i64 = 2;
 /// 搜索结果的最大数量
 const SEARCH_LIMIT: usize = 30;
 
+/// 一次最多提交的播放记录数量
+const PLAY_LIMIT: usize = 500;
+
 
 /// 从曲库搜索歌曲
 /// 关键词和按空格、横线拆开的词,歌名或歌手包含任意一个就算匹配,按匹配程度排序
@@ -69,6 +72,7 @@ pub async fn search(login: Ext<LoginUser>, key: String) -> Result<Vec<MusicVo>, 
                 logo: dfs_service::file_url(it.logo.as_deref()),
                 duration: it.duration,
                 video_state: it.videoState,
+                play_count: Some(it.playCount),
                 files: music_service::files_of(&file_map, it.id),
                 ..Default::default()
             }
@@ -146,6 +150,40 @@ pub async fn search_collect(login: Ext<LoginUser>, key: String) -> Result<Vec<Mu
     Ok(result)
 }
 
+/// 提交播放记录:一首歌自然播放完成算一次,播放次数加1
+/// 离线播放的记录由客户端保存,有网络之后一起提交,所以同一首歌可以出现多次
+#[POST("/api/music/play")]
+pub async fn play(form: form::MusicPlay) -> Result<(), BizError> {
+    //按出现的顺序统计每首歌的播放次数
+    let mut counts: Vec<(i64, i64)> = Vec::new();
+    let mut total = 0;
+    for it in form.ids.split(',').map(str::trim).filter(|it| !it.is_empty()) {
+        let Ok(id) = it.parse::<i64>() else {
+            return Err(biz_error!("歌曲ID格式错误"));
+        };
+        total += 1;
+        if total > PLAY_LIMIT {
+            return Err(biz_error!("一次最多提交500条播放记录"));
+        }
+
+        //采集平台的搜索结果(还没有添加到曲库)ID为0,不计
+        if id <= 0 {
+            continue;
+        }
+        match counts.iter_mut().find(|(music_id, _)| *music_id == id) {
+            Some((_, count)) => *count += 1,
+            None => counts.push((id, 1)),
+        }
+    }
+
+    //不存在、已删除的歌曲不报错,否则客户端保存的记录会一直提交失败
+    let mut ctx = lib_db::get_context();
+    for (id, count) in counts {
+        music_dao::add_play_count(&mut ctx, id, count).await?;
+    }
+    Ok(())
+}
+
 /// 歌曲详情
 #[GET("/api/music/detail")]
 pub async fn detail(id: i64) -> Result<MusicVo, BizError> {
@@ -164,6 +202,7 @@ pub async fn detail(id: i64) -> Result<MusicVo, BizError> {
         duration: music.duration,
         video_state: music.videoState,
         favorite_id: None,
+        play_count: None,
         files: music_service::file_vos(&files),
         collect: music_service::collect_vo(music.platform, music.extra),
     })

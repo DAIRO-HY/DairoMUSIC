@@ -84,6 +84,7 @@
   "logo": "封面地址",
   "duration": 269000,
   "videoState": 2,
+  "playCount": 128,
   "favoriteId": 1,
   "files": [
     {
@@ -105,6 +106,7 @@
 ```
 - `artist`、`album` 可能为 null,由客户端决定显示什么。
 - `favoriteId` 只有歌单里的歌曲才有。
+- `playCount` 播放次数,只有曲库的搜索结果(`/api/music/search`)才有。
 - `files` 是这首歌所有音质的文件,按 `bitRate` 从低到高排序;空数组表示还没有采集完成,可以用 `collect.url` 播放。
 - 文件的 `id` 是文件ID,不会改变,可以用来做缓存的key(DairoDFS的地址变了也不影响)。
 - `videoState` 视频状态:0 未采集,1 采集中,2 有视频,3 没有视频(YouTube上只有一张图片),4 后台删除了视频,5 采集失败。3、4 表示没有视频;0、1、5 还不确定,打开视频页时调用 `/api/music/video`。采集平台的搜索结果(`id` 为0)固定为0。
@@ -118,12 +120,23 @@
 | `GET /api/music/detail` | `id` | 歌曲详情 |
 | `GET /api/music/video` | `id` | 歌曲视频,见下面的"视频" |
 | `GET /api/music/lrc` | `id` | 歌词列表 `[{id, musicId, title, lrc, agreeCount, disagreeCount, state, source}]` |
+| `POST /api/music/play` | `ids` | 提交播放记录,见下面的"播放次数" |
 | `POST /api/music/collect` | `name`、`logo`、`platform`、`extra` | 采集平台的歌曲加入曲库,返回歌曲ID(已经加入过时直接返回) |
 | `POST /api/music/correct` | `id`、`name`、`artist`、`album` | 纠错,只提交要修改的字段 |
 | `POST /api/music/complaint` | `id`、`content` | 投诉 |
 | `GET /api/music/complaint_samples` | | 投诉理由的选项 |
 | `GET /api/music/upload/by_md5` | `md5` | 曲库里已经有这个文件时返回歌曲ID,没有时404 |
 | `POST /api/music/upload` | `name`(带扩展名的文件名,URL参数);请求体直接放文件内容 | 上传本地歌曲(mp3、flac、wav、ape、m4a、aac、ogg、wma,500MB以内),返回歌曲ID。后台处理完成之前 `files` 为空数组 |
+
+## 播放次数
+
+一首歌**自然播放到结尾**算一次,调用 `POST /api/music/play` 让播放次数加1。
+
+- `ids`:播放完成的歌曲ID,逗号分隔,同一首歌播放了几次就出现几次,例如 `12,12,35`。一次最多500个。
+- 单曲循环时每播放完一遍都算一次。手动切歌、拖动进度条跳到结尾不算。
+- 离线播放(播放已下载的歌曲)也要计数:播放完成时先保存到本地的待提交记录(要保存到磁盘,退出APP不能丢),然后提交,成功之后清除;提交失败(没有网络)时保留,下次播放完成、或者恢复网络、启动APP时再一起提交。在线和离线用同一套逻辑。
+- 采集平台的搜索结果(`id` 为0,还没有加入曲库)不计,不需要提交。
+- 不存在、已经删除的歌曲ID会被忽略,不会报错。接口返回成功就可以清除本地的记录。
 
 ## 视频
 

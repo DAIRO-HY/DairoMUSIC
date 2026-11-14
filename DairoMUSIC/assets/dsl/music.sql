@@ -146,6 +146,14 @@ order by auditState desc limit 2000
 
 -- ------------------------------
 
+-- 增加播放次数(已删除的歌曲不计)
+-- @name add_play_count
+-- @param id:i64
+-- @param count:i64
+update music set playCount = playCount + :count where id = :id and deleteFlag = 0;
+
+-- ------------------------------
+
 -- 纠错:更新歌名、歌手、专辑(不改变审核状态)
 -- @name correct
 -- @param id:i64

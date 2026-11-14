@@ -275,6 +275,14 @@ pub struct FavoriteAssign {
     pub user: String,
 }
 
+/// 提交播放记录
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicPlay {
+    // 播放完成的歌曲ID,逗号分隔,同一首歌播放了几次就出现几次
+    pub ids: String,
+}
+
 /// 批量审核歌曲
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
