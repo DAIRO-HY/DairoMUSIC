@@ -38,3 +38,11 @@ select * from music_file where 1 = 1
 -- @each music_ids seq="," open="and musicId in (" close=")" item="id"
 :id
 -- @end
+
+
+-- ------------------------------
+
+-- 删除歌曲的歌曲文件(彻底删除歌曲时)
+-- @name delete_by_music
+-- @param music_id:i64
+delete from music_file where musicId = :music_id;

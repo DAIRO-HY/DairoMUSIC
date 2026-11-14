@@ -51,3 +51,11 @@ update music_correct set state = :state, adminId = :admin_id, handleTime = :hand
 -- @name count_pending
 -- @return i64
 select count(*) from music_correct where state = 0;
+
+
+-- ------------------------------
+
+-- 删除歌曲的纠错(彻底删除歌曲时)
+-- @name delete_by_music
+-- @param music_id:i64
+delete from music_correct where musicId = :music_id;

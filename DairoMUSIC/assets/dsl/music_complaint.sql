@@ -65,3 +65,11 @@ update music_complaint set state = 1, adminId = :admin_id, handleTime = :handle_
 -- @name count_pending
 -- @return i64
 select count(*) from music_complaint where state = 0;
+
+
+-- ------------------------------
+
+-- 删除歌曲的投诉(彻底删除歌曲时)
+-- @name delete_by_music
+-- @param music_id:i64
+delete from music_complaint where musicId = :music_id;

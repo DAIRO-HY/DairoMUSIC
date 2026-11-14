@@ -3,7 +3,7 @@
 use crate::dao::user_favorite_dao::UserFavorite;
 use crate::dao::user_music_dao::{FavoriteMusicTemp, UserMusic};
 use crate::dao::{music_dao, music_file_dao, user_favorite_dao, user_music_dao};
-use crate::service::image_service::{self, TEMP_LOGO_PREFIX};
+use crate::service::file_clean_service::{self, TEMP_LOGO_PREFIX};
 use crate::service::{dfs_service, vip_service};
 use crate::service::music_service::{self, MusicVo};
 use crate::util::time_util;
@@ -163,7 +163,7 @@ pub async fn logo(login: Ext<LoginUser>, form: LogoUpload) -> Result<Option<Stri
     let favorite = get_my_favorite(&mut ctx, form.id, &login).await?;
     let path = upload_image(form.file).await?;
     user_favorite_dao::update_logo(&mut ctx, form.id, Some(path.clone())).await?;
-    image_service::remove_replaced(favorite.logo, Some(&path));
+    file_clean_service::remove_replaced(favorite.logo, Some(&path));
     Ok(dfs_service::file_url(Some(&path)))
 }
 
@@ -178,10 +178,14 @@ pub async fn delete(login: Ext<LoginUser>, id: i64) -> Result<(), BizError> {
     if user_favorite_dao::count_referenced(&mut ctx, id.to_string()).await? > 0 {
         //首页的推荐分组、轮播正在使用的歌单不能真正删除,改为归管理员(所属会员ID为0),管理员可以再分配给其他会员维护
         user_favorite_dao::set_owner(&mut ctx, id, 0).await?;
+        ctx.commit().await?;
     } else {
         user_favorite_dao::set_deleted(&mut ctx, id, time_util::current_millis()).await?;
+        ctx.commit().await?;
+
+        //上传的封面从DairoDFS删除
+        file_clean_service::remove_replaced(favorite.logo, None);
     }
-    ctx.commit().await?;
     Ok(())
 }
 

@@ -8,7 +8,7 @@
 use crate::application;
 use crate::dao::music_video_dao::{self, MusicVideo};
 use crate::dao::music_dao;
-use crate::service::{collect_service, collect_task, dfs_service};
+use crate::service::{collect_service, collect_task, dfs_service, file_clean_service};
 use crate::util::time_util;
 use crate::util::video_util::{self, VideoInfo};
 use rand::distr::{Alphanumeric, SampleString};
@@ -92,6 +92,13 @@ pub async fn remove_upload(music_id: i64) {
     }
 }
 
+/// 删除歌曲的视频记录,返回视频文件的存储路径(数据库提交之后用file_clean_service从DairoDFS删除)
+pub async fn delete_videos(ctx: &mut sqlx_context::DbContext, music_id: i64) -> Result<Vec<String>, sqlx::Error> {
+    let videos = music_video_dao::select_by_music(ctx, music_id).await?;
+    music_video_dao::delete_by_music(ctx, music_id).await?;
+    Ok(videos.into_iter().filter_map(|it| it.path).collect())
+}
+
 /// 唤醒任务
 static WAKE: Notify = Notify::const_new();
 
@@ -164,8 +171,9 @@ async fn reset_processing() -> Result<(), sqlx::Error> {
     let mut ctx = lib_db::get_context();
     let now = time_util::current_millis();
     for music_id in music_video_dao::select_processing_music(&mut ctx).await? {
-        music_video_dao::delete_by_music(&mut ctx, music_id).await?;
+        let paths = delete_videos(&mut ctx, music_id).await?;
         music_dao::set_video_state(&mut ctx, music_id, VIDEO_COLLECTING, now).await?;
+        file_clean_service::remove_unused(paths).await;
     }
     Ok(())
 }
@@ -227,8 +235,9 @@ async fn run(music_id: i64, source: Source) -> Result<(), sqlx::Error> {
 
             //处理过程中被后台删除了视频时,不改状态
             if current_state(music_id).await != Some(VIDEO_DELETED) {
-                music_video_dao::delete_by_music(&mut ctx, music_id).await?;
+                let paths = delete_videos(&mut ctx, music_id).await?;
                 music_dao::set_video_state(&mut ctx, music_id, VIDEO_FAIL, now).await?;
+                file_clean_service::remove_unused(paths).await;
             }
         }
     }
@@ -284,7 +293,7 @@ async fn process(music_id: i64, source: &Source, work_dir: &Path) -> Result<i64,
     //3.先创建视频记录,客户端可以看到"转码中"
     let need_smooth = video_util::need_smooth(&info);
     let mut ctx = crate::db::begin().await.map_err(|e| e.to_string())?;
-    music_video_dao::delete_by_music(&mut ctx, music_id).await.map_err(|e| e.to_string())?;
+    let old_paths = delete_videos(&mut ctx, music_id).await.map_err(|e| e.to_string())?;
     let mut qualities = vec![QUALITY_ORIGINAL];
     if need_smooth {
         qualities.push(QUALITY_SMOOTH);
@@ -304,6 +313,9 @@ async fn process(music_id: i64, source: &Source, work_dir: &Path) -> Result<i64,
         .await
         .map_err(|e| e.to_string())?;
     ctx.commit().await.map_err(|e| e.to_string())?;
+
+    //原来的视频文件从DairoDFS删除
+    file_clean_service::remove_unused(old_paths).await;
 
     //4.流畅版先处理(转码快),再处理原画
     let mut success = 0;

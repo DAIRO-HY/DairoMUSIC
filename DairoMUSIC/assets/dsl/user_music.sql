@@ -65,3 +65,11 @@ order by um.favoriteId, um.sort desc;
 -- @param favorite_id:i64
 -- @return i64
 select coalesce(max(sort), 0) from user_music where favoriteId = :favorite_id;
+
+
+-- ------------------------------
+
+-- 删除歌曲的歌单里的收藏(彻底删除歌曲时)
+-- @name delete_by_music
+-- @param music_id:i64
+delete from user_music where musicId = :music_id;

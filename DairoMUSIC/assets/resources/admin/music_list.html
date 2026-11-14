@@ -93,6 +93,11 @@
                 icon: "bi-arrow-counterclockwise", title: "恢复", show: it => it.deleteFlag === 1, onClick: it => {
                     $.ajaxByData("/admin/api/music/restore").add("id", it.id).success(() => table.load()).post()
                 }
+            },
+            {
+                icon: "bi-x-octagon", title: "彻底删除", danger: true, show: it => it.deleteFlag === 1, onClick: it => confirmDo(`确定要彻底删除歌曲【${it.name}】吗?歌曲文件、视频、封面会一起删除,不能恢复。`, () => {
+                    $.ajaxByData("/admin/api/music/purge").add("id", it.id).success(() => table.load()).post()
+                })
             }
         ]
     })

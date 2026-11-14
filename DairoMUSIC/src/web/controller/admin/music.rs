@@ -6,7 +6,7 @@ use crate::dao::music_video_dao::MusicVideo;
 use crate::dao::music_lrc_dao::MusicLrc;
 use crate::dao::{music_collect_dao, music_dao, music_file_dao, music_lrc_dao, music_video_dao};
 use crate::dao::music_dao::Music;
-use crate::service::{collect_service, dfs_service, video_task};
+use crate::service::{collect_service, dfs_service, file_clean_service, music_service, video_task};
 use crate::util::time_util;
 use crate::web::biz_error::BizError;
 use crate::web::form;
@@ -152,15 +152,16 @@ pub async fn videos(id: i64) -> Result<Vec<MusicVideoItem>, BizError> {
     Ok(list)
 }
 
-/// 删除歌曲的视频(误判为有视频时使用),以后也不再自动采集
+/// 删除歌曲的视频(误判为有视频时使用),视频文件从DairoDFS删除,以后也不再自动采集
 #[POST("/admin/api/music/delete_video")]
 pub async fn delete_video(id: i64) -> Result<(), BizError> {
     //还没有处理的上传视频也一起删除
     video_task::remove_upload(id).await;
     let mut ctx = db::begin().await?;
-    music_video_dao::delete_by_music(&mut ctx, id).await?;
+    let paths = video_task::delete_videos(&mut ctx, id).await?;
     music_dao::set_video_state(&mut ctx, id, video_task::VIDEO_DELETED, time_util::current_millis()).await?;
     ctx.commit().await?;
+    file_clean_service::remove_unused_later(paths);
     Ok(())
 }
 
@@ -217,9 +218,10 @@ pub async fn upload_video(id: i64, name: String, mut body: BodyStream) -> Result
     video_task::remove_upload(id).await;
     tokio::fs::rename(&temp_path, dir.join(format!("{}.{}", id, ext))).await?;
     let mut ctx = db::begin().await?;
-    music_video_dao::delete_by_music(&mut ctx, id).await?;
+    let paths = video_task::delete_videos(&mut ctx, id).await?;
     music_dao::set_video_state(&mut ctx, id, video_task::VIDEO_COLLECTING, time_util::current_millis()).await?;
     ctx.commit().await?;
+    file_clean_service::remove_unused_later(paths);
     video_task::wake();
     Ok(())
 }
@@ -240,9 +242,10 @@ pub async fn recollect_video(id: i64) -> Result<(), BizError> {
     if collect.platform.as_deref() != Some(collect_service::PLATFORM_YOUTUBE) {
         return Err(biz_error!("只有采集平台的歌曲才有视频"));
     }
-    music_video_dao::delete_by_music(&mut ctx, id).await?;
+    let paths = video_task::delete_videos(&mut ctx, id).await?;
     music_dao::set_video_state(&mut ctx, id, video_task::VIDEO_COLLECTING, time_util::current_millis()).await?;
     ctx.commit().await?;
+    file_clean_service::remove_unused_later(paths);
 
     //手动上传了但还没有处理的视频不要了
     video_task::remove_upload(id).await;
@@ -353,7 +356,7 @@ pub async fn audit(form: form::MusicAudit) -> Result<(), BizError> {
     Ok(())
 }
 
-/// 删除歌曲(标记为删除,不删除文件)
+/// 删除歌曲(标记为删除,可以恢复;文件在彻底删除时才删除,删除超过30天的歌曲自动彻底删除)
 #[POST("/admin/api/music/delete")]
 pub async fn delete(id: i64) -> Result<(), BizError> {
     let mut ctx = db::begin().await?;
@@ -380,6 +383,12 @@ pub struct LogoUpload {
     pub file: Vec<u8>,
 }
 
+/// 彻底删除已经删除的歌曲:数据库记录和DairoDFS里的歌曲文件、视频、封面一起删除,不能恢复
+#[POST("/admin/api/music/purge")]
+pub async fn purge(id: i64) -> Result<(), BizError> {
+    music_service::purge(id).await
+}
+
 /// 上传歌曲封面(保存到DairoDFS)
 /// 不限制上传的图片大小,上传后居中裁切成正方形并缩小到800x800,转换成JPG
 #[POST("/admin/api/music/upload_logo")]
@@ -390,7 +399,7 @@ pub async fn upload_logo(form: LogoUpload) -> Result<Option<String>, BizError> {
     };
     let path = crate::web::controller::api::user::upload_image(form.file).await?;
     music_dao::update_logo(&mut ctx, form.id, Some(path.clone())).await?;
-    crate::service::image_service::remove_replaced(music.logo, Some(&path));
+    file_clean_service::remove_replaced(music.logo, Some(&path));
     Ok(dfs_service::file_url(Some(&path)))
 }
 

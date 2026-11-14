@@ -258,12 +258,23 @@ order by id desc limit 20
 
 -- ------------------------------
 
--- 图片被使用的次数(歌曲封面、会员头像、歌单封面、轮播图),用来判断旧图片能不能从DairoDFS删除
--- @name count_image_used
--- @param path:String 图片的存储路径
+-- 文件被使用的次数(歌曲封面、会员头像、没有删除的歌单的封面、轮播图、歌曲文件、视频),用来判断文件能不能从DairoDFS删除
+-- @name count_path_used
+-- @param path:String 文件的存储路径
 -- @param temp_path:String 歌单自动使用歌曲封面时保存的值(temp:存储路径)
 -- @return i64
 select (select count(*) from music where logo = :path)
      + (select count(*) from user where logo = :path)
-     + (select count(*) from user_favorite where logo = :path or logo = :temp_path)
-     + (select count(*) from swiper where image = :path);
+     + (select count(*) from user_favorite where isDelete = 0 and (logo = :path or logo = :temp_path))
+     + (select count(*) from swiper where image = :path)
+     + (select count(*) from music_file where path = :path)
+     + (select count(*) from music_video where path = :path);
+
+-- ------------------------------
+
+-- 删除超过一段时间的歌曲(自动彻底删除)
+-- @name select_purge_ids
+-- @param delete_before:i64 在这个时间之前删除的
+-- @param limit:i64
+-- @return List<i64>
+select id from music where deleteFlag = 1 and deleteTime < :delete_before order by id limit :limit;

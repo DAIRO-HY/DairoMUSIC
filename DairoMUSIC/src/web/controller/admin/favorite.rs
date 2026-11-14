@@ -2,7 +2,7 @@
 
 use crate::dao::{music_dao, user_dao, user_favorite_dao};
 use crate::service::dfs_service;
-use crate::service::image_service::TEMP_LOGO_PREFIX;
+use crate::service::file_clean_service::{self, TEMP_LOGO_PREFIX};
 use crate::util::time_util;
 use crate::web::biz_error::BizError;
 use crate::web::form;
@@ -174,5 +174,8 @@ pub async fn delete(id: i64) -> Result<(), BizError> {
     }
     user_favorite_dao::set_deleted(&mut ctx, id, time_util::current_millis()).await?;
     ctx.commit().await?;
+
+    //上传的封面从DairoDFS删除
+    file_clean_service::remove_replaced(favorite.logo, None);
     Ok(())
 }

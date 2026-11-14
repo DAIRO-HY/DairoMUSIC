@@ -3,7 +3,7 @@ pub mod collect_task;
 pub mod config_service;
 pub mod dfs_service;
 pub mod email_service;
-pub mod image_service;
+pub mod file_clean_service;
 pub mod music_service;
 pub mod process_service;
 pub mod software_service;

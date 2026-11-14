@@ -77,3 +77,11 @@ select * from music_collect where musicId = :music_id;
 -- @param id:i64
 -- @param now:i64
 update music_collect set state = -1, downloadCount = 0, memo = '等待重新处理', updateTime = :now where id = :id and state != 0;
+
+
+-- ------------------------------
+
+-- 删除歌曲的采集记录(彻底删除歌曲时)
+-- @name delete_by_music
+-- @param music_id:i64
+delete from music_collect where musicId = :music_id;

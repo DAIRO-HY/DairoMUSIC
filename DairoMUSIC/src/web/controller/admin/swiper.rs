@@ -225,7 +225,7 @@ pub async fn edit(form: form::SwiperEdit) -> Result<(), BizError> {
     ctx.commit().await?;
 
     //换了图片时,旧图片从DairoDFS删除
-    crate::service::image_service::remove_replaced(old_image, Some(&new_image));
+    crate::service::file_clean_service::remove_replaced(old_image, Some(&new_image));
     Ok(())
 }
 

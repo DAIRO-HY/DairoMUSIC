@@ -27,6 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //后台处理采集任务和会员上传的歌曲
     service::collect_task::start();
     service::video_task::start();
+    service::music_service::start_purge_task();
 
     //定时清理过期的登录记录
     web::filter::auth::start_clean_task();
