@@ -45,9 +45,7 @@ pub async fn save(form: form::SystemConfig) -> Result<(), BizError> {
         it.video_encoder = form.video_encoder;
         it.video_threads = form.video_threads;
         it.allow_save_album = form.allow_save_album == 1;
-        it.allow_download_music = form.allow_download_music == 1;
-        it.allow_download_video = form.allow_download_video == 1;
-        it.allow_send_music = form.allow_send_music == 1;
+        it.allow_send_file = form.allow_send_file == 1;
         it.vip_enable = form.vip_enable == 1;
         it.vip_max_years = form.vip_max_years;
     })

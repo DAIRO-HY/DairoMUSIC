@@ -19,17 +19,11 @@ pub struct PublicConfig {
     // 是否开放注册(关闭时客户端隐藏注册和免注册使用)
     pub allow_register: bool,
 
-    // 是否允许把下载的视频保存到相册
+    // 是否允许把下载的视频保存到相册(开启了VIP功能时只有VIP可以保存,由客户端判断)
     pub allow_save_album: bool,
 
-    // 是否允许下载歌曲(为false时客户端隐藏下载按钮)
-    pub allow_download_music: bool,
-
-    // 是否允许下载视频(为false时客户端隐藏视频的下载按钮)
-    pub allow_download_video: bool,
-
-    // 是否允许把下载的歌曲文件发送到APP外面(隔空投送、其他APP等),不允许下载歌曲时固定为false
-    pub allow_send_music: bool,
+    // 是否允许把下载的歌曲、视频文件发送到APP外面(隔空投送、其他APP等;开启了VIP功能时只有VIP可以发送,由客户端判断)
+    pub allow_send_file: bool,
 
     // 是否开启了视频采集(为false时还没有转码好的视频不会再处理,客户端不用轮询)
     pub video_enable: bool,
@@ -61,9 +55,7 @@ pub async fn config() -> PublicConfig {
         version: crate::application::VERSION,
         allow_register: config.allow_register,
         allow_save_album: config.allow_save_album,
-        allow_download_music: config.allow_download_music,
-        allow_download_video: config.allow_download_video,
-        allow_send_music: config.allow_download_music && config.allow_send_music,
+        allow_send_file: config.allow_send_file,
         video_enable: collect_service::is_video_enabled(),
     }
 }

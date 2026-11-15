@@ -25,14 +25,15 @@
 ### GET /api/common/config
 服务器的公开配置,客户端选择服务器时调用,也可以用来判断地址是否是 DairoMUSIC 服务器。
 ```json
-{"serverId": "yxgqqjil9wcsyegvhrvetc1d7rehujy5", "version": "2.0.0", "allowRegister": true, "allowSaveAlbum": false, "allowDownloadMusic": true, "allowDownloadVideo": true, "allowSendMusic": true, "videoEnable": true}
+{"serverId": "yxgqqjil9wcsyegvhrvetc1d7rehujy5", "version": "2.0.0", "allowRegister": true, "allowSaveAlbum": false, "allowSendFile": true, "videoEnable": true}
 ```
 - `serverId`:服务器唯一标识,服务器第一次启动时生成,之后不会改变。服务器的域名、端口变了也不变,客户端可以用来区分不同服务器的缓存。
 - `allowRegister` 为 false 时隐藏注册和"免注册使用"。
-- `allowSaveAlbum`:是否允许把下载的视频保存到相册(后台"系统配置"里设置)。为 false 时下载视频不询问是否保存到相册。
-- `allowDownloadMusic`:是否允许下载歌曲(后台"系统配置"里设置,默认允许)。为 false 时隐藏歌曲的下载按钮(歌曲详情的下载、歌单的全部下载),已经下载的歌曲仍可以播放和删除。下载时从歌曲的 `files` 里选择音质。
-- `allowDownloadVideo`:是否允许下载视频(后台"系统配置"里设置,默认允许)。为 false 时隐藏视频的下载按钮,已经下载的视频仍可以播放和删除;`allowSaveAlbum` 只在允许下载视频时有意义。
-- `allowSendMusic`:是否允许把下载好的歌曲文件发送到APP外面(隔空投送、其他APP等;后台"系统配置"里设置,默认允许)。为 false 时隐藏「发送歌曲文件」。只在允许下载歌曲时有效:`allowDownloadMusic` 为 false 时这个字段固定为 false。
+- 下载(APP内下载)始终允许,没有开关:下载的文件只保存在APP里,和缓存一样;能下载的音质、清晰度和能播放的一样(见「VIP」)。下载时从歌曲的 `files`、视频的 `original` / `smooth` 里选择。
+- `allowSaveAlbum`:是否允许把下载的视频保存到相册(后台"系统配置"里设置)。为 false 时下载视频不显示保存到相册的选项。
+- `allowSendFile`:是否允许把下载好的歌曲、视频文件发送到APP外面(隔空投送、其他APP等;后台"系统配置"里设置,默认允许)。为 false 时隐藏歌曲的「发送歌曲文件」和视频下载时的「发送文件」。
+- 保存到相册、发送文件都是把文件带到APP外面,开启了VIP功能时只有VIP可以使用:是否可以使用 = 后台开关(`allowSaveAlbum` / `allowSendFile`)为 true **并且**(`vip.enable` 为 false **或者** `vip.isVip` 为 true)。
+- 发送的是已经下载到本地的文件(下载时选择的音质、清晰度),发送时不用再选择。
 - `videoEnable`:服务器是否开启了视频采集(后台启用歌曲采集,并且"系统配置"里开启了视频)。为 false 时服务器不会再采集和转码视频,`/api/music/video` 返回的采集中、转码中的视频会一直停在这个状态,客户端不要轮询,提示"该歌曲没有视频或服务器未开启视频采集功能";已经转码好的视频照常播放。
 
 ### GET /api/app_version/check
@@ -184,7 +185,7 @@
 
 ## VIP
 
-后台"系统配置"里可以开启VIP功能(默认关闭)。开启之后,不是VIP的会员只能听标准音质的歌曲、看流畅版的视频,不能下载。会员用兑换码(卡号+卡密,后台生成)成为VIP。
+后台"系统配置"里可以开启VIP功能(默认关闭)。开启之后,不是VIP的会员只能听、下载标准音质的歌曲和流畅版的视频,不能发送文件、保存到相册。会员用兑换码(卡号+卡密,后台生成)成为VIP。
 
 ### VIP状态
 会员信息(登录接口的返回值、`GET /api/user/info`)里的 `vip`:
@@ -200,7 +201,8 @@
 ### 非VIP的限制(`enable` 为 true 并且 `isVip` 为 false)
 - **歌曲**:`files` 还是返回所有音质的文件,但是只有第一个(最低音质,即标准音质)有 `url`,其他文件 `url` 为 null、`vipOnly` 为 true。音质选项上可以给 `vipOnly` 的文件显示VIP标记,选择时提示需要VIP。播放、缓存时只从有 `url` 的文件里选择。
 - **视频**:`/api/music/video` 的 `original` 的 `url` 为 null、`vipOnly` 为 true,只能看 `smooth`。没有单独的流畅版(`smooth` 和 `original` 是同一个文件)、或者流畅版转码失败时,原画可以看。
-- **下载**:歌曲、视频都不能下载,隐藏下载按钮(或者点击时提示需要VIP)。是否可以下载 = 后台允许下载(`allowDownloadMusic` / `allowDownloadVideo`)**并且**(`vip.enable` 为 false **或者** `vip.isVip` 为 true)。后台不允许下载时VIP也不能下载。
+- **下载**:可以下载,但是和播放一样只能选择有 `url` 的文件(标准音质的歌曲、流畅版的视频),`vipOnly` 的文件显示VIP标记,选择时提示需要VIP。
+- **发送文件、保存到相册**:不能使用,隐藏入口(或者点击时提示需要VIP)。后台关闭了 `allowSendFile` / `allowSaveAlbum` 时VIP也不能使用。
 - **已经下载、缓存的文件不受限制**:VIP到期之后,以前下载、缓存的高音质歌曲和原画视频可以继续播放。本地有文件(按文件 `id` 查找)时直接播放本地文件,不看 `url` 和 `vipOnly`。
 - 采集平台的搜索结果(`id` 为0,用 `collect.url` 播放)没有限制。
 

@@ -46,22 +46,14 @@ pub struct Config {
     // 视频转码使用的线程数,0:自动(CPU核数的一半)
     pub video_threads: i64,
 
-    // 是否允许客户端把下载的视频保存到相册
+    // 是否允许客户端把下载的视频保存到相册(开启了VIP功能时只有VIP可以保存)
     pub allow_save_album: bool,
 
-    // 是否允许客户端下载歌曲(没有设置过时默认允许)
+    // 是否允许客户端把下载的歌曲、视频文件发送到APP外面(隔空投送、其他APP等;没有设置过时默认允许)
     #[serde(default = "default_true")]
-    pub allow_download_music: bool,
+    pub allow_send_file: bool,
 
-    // 是否允许客户端下载视频(没有设置过时默认允许)
-    #[serde(default = "default_true")]
-    pub allow_download_video: bool,
-
-    // 是否允许客户端把下载的歌曲文件发送到APP外面(隔空投送、其他APP等;没有设置过时默认允许),只在允许下载歌曲时有效
-    #[serde(default = "default_true")]
-    pub allow_send_music: bool,
-
-    // 是否开启VIP功能(开启之后不是VIP的会员只能听标准音质的歌曲、看流畅版的视频,不能下载)
+    // 是否开启VIP功能(开启之后不是VIP的会员只能听、下载标准音质的歌曲和流畅版的视频,不能发送文件、保存到相册)
     pub vip_enable: bool,
 
     // 已经是VIP的会员再兑换时,VIP有效期最多可以累加到多少年(没有设置过时为2年)
