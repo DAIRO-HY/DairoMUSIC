@@ -57,6 +57,10 @@ pub struct Config {
     #[serde(default = "default_true")]
     pub allow_download_video: bool,
 
+    // 是否允许客户端把下载的歌曲文件发送到APP外面(隔空投送、其他APP等;没有设置过时默认允许),只在允许下载歌曲时有效
+    #[serde(default = "default_true")]
+    pub allow_send_music: bool,
+
     // 是否开启VIP功能(开启之后不是VIP的会员只能听标准音质的歌曲、看流畅版的视频,不能下载)
     pub vip_enable: bool,
 

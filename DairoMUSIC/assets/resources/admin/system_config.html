@@ -20,6 +20,11 @@
                 <label class="form-check-label" for="allowDownloadMusic">允许下载歌曲</label>
             </div>
             <div class="text-secondary small mt-1">关闭后客户端不显示下载歌曲的按钮,已经下载的歌曲不受影响</div>
+            <div class="form-check form-switch mt-3">
+                <input class="form-check-input" type="checkbox" role="switch" name="allowSendMusic" value="1" id="allowSendMusic">
+                <label class="form-check-label" for="allowSendMusic">允许发送歌曲文件</label>
+            </div>
+            <div class="text-secondary small mt-1">开启后,客户端可以把下载好的歌曲文件通过隔空投送、其他APP发给别人;只在允许下载歌曲时有效</div>
         </div>
         <div class="app-card">
             <div class="app-card-title">VIP</div>
@@ -119,6 +124,7 @@
             $("#allowSaveAlbum").prop("checked", data.allowSaveAlbum)
             $("#allowDownloadMusic").prop("checked", data.allowDownloadMusic)
             $("#allowDownloadVideo").prop("checked", data.allowDownloadVideo)
+            $("#allowSendMusic").prop("checked", data.allowSendMusic)
             $("#vipEnable").prop("checked", data.vipEnable)
         }).get()
     })

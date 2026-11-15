@@ -28,6 +28,9 @@ pub struct PublicConfig {
     // 是否允许下载视频(为false时客户端隐藏视频的下载按钮)
     pub allow_download_video: bool,
 
+    // 是否允许把下载的歌曲文件发送到APP外面(隔空投送、其他APP等),不允许下载歌曲时固定为false
+    pub allow_send_music: bool,
+
     // 是否开启了视频采集(为false时还没有转码好的视频不会再处理,客户端不用轮询)
     pub video_enable: bool,
 }
@@ -52,13 +55,15 @@ pub struct AppVersionVo {
 /// 服务器的公开配置(客户端选择服务器时调用)
 #[GET("/api/common/config")]
 pub async fn config() -> PublicConfig {
+    let config = config_service::get();
     PublicConfig {
-        server_id: config_service::get().server_id,
+        server_id: config.server_id,
         version: crate::application::VERSION,
-        allow_register: config_service::get().allow_register,
-        allow_save_album: config_service::get().allow_save_album,
-        allow_download_music: config_service::get().allow_download_music,
-        allow_download_video: config_service::get().allow_download_video,
+        allow_register: config.allow_register,
+        allow_save_album: config.allow_save_album,
+        allow_download_music: config.allow_download_music,
+        allow_download_video: config.allow_download_video,
+        allow_send_music: config.allow_download_music && config.allow_send_music,
         video_enable: collect_service::is_video_enabled(),
     }
 }

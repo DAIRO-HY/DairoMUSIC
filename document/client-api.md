@@ -25,13 +25,14 @@
 ### GET /api/common/config
 服务器的公开配置,客户端选择服务器时调用,也可以用来判断地址是否是 DairoMUSIC 服务器。
 ```json
-{"serverId": "yxgqqjil9wcsyegvhrvetc1d7rehujy5", "version": "2.0.0", "allowRegister": true, "allowSaveAlbum": false, "allowDownloadMusic": true, "allowDownloadVideo": true, "videoEnable": true}
+{"serverId": "yxgqqjil9wcsyegvhrvetc1d7rehujy5", "version": "2.0.0", "allowRegister": true, "allowSaveAlbum": false, "allowDownloadMusic": true, "allowDownloadVideo": true, "allowSendMusic": true, "videoEnable": true}
 ```
 - `serverId`:服务器唯一标识,服务器第一次启动时生成,之后不会改变。服务器的域名、端口变了也不变,客户端可以用来区分不同服务器的缓存。
 - `allowRegister` 为 false 时隐藏注册和"免注册使用"。
 - `allowSaveAlbum`:是否允许把下载的视频保存到相册(后台"系统配置"里设置)。为 false 时下载视频不询问是否保存到相册。
 - `allowDownloadMusic`:是否允许下载歌曲(后台"系统配置"里设置,默认允许)。为 false 时隐藏歌曲的下载按钮(歌曲详情的下载、歌单的全部下载),已经下载的歌曲仍可以播放和删除。下载时从歌曲的 `files` 里选择音质。
 - `allowDownloadVideo`:是否允许下载视频(后台"系统配置"里设置,默认允许)。为 false 时隐藏视频的下载按钮,已经下载的视频仍可以播放和删除;`allowSaveAlbum` 只在允许下载视频时有意义。
+- `allowSendMusic`:是否允许把下载好的歌曲文件发送到APP外面(隔空投送、其他APP等;后台"系统配置"里设置,默认允许)。为 false 时隐藏「发送歌曲文件」。只在允许下载歌曲时有效:`allowDownloadMusic` 为 false 时这个字段固定为 false。
 - `videoEnable`:服务器是否开启了视频采集(后台启用歌曲采集,并且"系统配置"里开启了视频)。为 false 时服务器不会再采集和转码视频,`/api/music/video` 返回的采集中、转码中的视频会一直停在这个状态,客户端不要轮询,提示"该歌曲没有视频或服务器未开启视频采集功能";已经转码好的视频照常播放。
 
 ### GET /api/app_version/check

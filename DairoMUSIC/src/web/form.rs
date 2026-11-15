@@ -638,6 +638,10 @@ pub struct SystemConfig {
     #[serde(default)]
     pub allow_download_video: i64,
 
+    // 是否允许发送歌曲文件 1:允许 0:不允许
+    #[serde(default)]
+    pub allow_send_music: i64,
+
     // 是否开启VIP功能 1:开启 0:关闭
     #[serde(default)]
     pub vip_enable: i64,
