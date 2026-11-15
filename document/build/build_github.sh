@@ -20,24 +20,20 @@ tag_name="$version"
 #---------------------------------------创建标签----------------------------------------
 echo "正在创建标签 $tag_name ..."
 
-#删除本地已经存在的标签
-git tag -d $tag_name
-
-#删除远程标签
-git push origin --delete tag $tag_name
-
-git tag $tag_name
-git push origin $tag_name
+#同一个版本重新编译时,标签改为指向最新的提交
+#不能先删除再创建:删除标签会让这个标签的Release变成草稿
+git tag -f $tag_name
+git push -f origin $tag_name
 
 
-#查询Release:latest的id
+#查询当前版本的Release的id(每个版本一个Release,同一个版本重新编译时使用原来的Release)
 get_release_id(){
   release_json=$(curl -L \
     -H "Accept: application/vnd.github+json" \
     -H "Authorization: Bearer $github_token" \
     -H "X-GitHub-Api-Version: 2026-03-10" \
-    https://api.github.com/repos/${repo}/releases)
-  id=$(echo "$release_json" | jq -r ".[] | select(.name==\"latest\") | .id")
+    "https://api.github.com/repos/${repo}/releases?per_page=100")
+  id=$(echo "$release_json" | jq -r "if type==\"array\" then [.[] | select(.tag_name==\"${tag_name}\") | .id][0] // empty else empty end")
 
   #返回值
   echo $id
@@ -51,7 +47,7 @@ create_release(){
   -H "Authorization: Bearer $github_token" \
   -H "X-GitHub-Api-Version: 2026-03-10" \
   https://api.github.com/repos/${repo}/releases \
-  -d "{\"tag_name\":\"${tag_name}\",\"target_commitish\":\"${branch}\",\"name\":\"latest\",\"body\":\"本次发布版本:${tag_name}\",\"draft\":false,\"prerelease\":false,\"generate_release_notes\":false}"
+  -d "{\"tag_name\":\"${tag_name}\",\"target_commitish\":\"${branch}\",\"name\":\"${tag_name}\",\"body\":\"本次发布版本:${tag_name}\",\"draft\":false,\"prerelease\":false,\"generate_release_notes\":false,\"make_latest\":\"true\"}"
   )
   echo "创建Release结果:${create_release_api_response}" >> push_github_tag.log
 
@@ -67,18 +63,20 @@ update_release(){
       -H "Authorization: Bearer $github_token" \
       -H "X-GitHub-Api-Version: 2026-03-10" \
       https://api.github.com/repos/${repo}/releases/$1 \
-      -d "{\"tag_name\":\"${tag_name}\",\"target_commitish\":\"${branch}\",\"name\":\"latest\",\"body\":\"本次发布版本:${tag_name}\",\"draft\":false,\"prerelease\":false}")
+      -d "{\"tag_name\":\"${tag_name}\",\"target_commitish\":\"${branch}\",\"name\":\"${tag_name}\",\"body\":\"本次发布版本:${tag_name}\",\"draft\":false,\"prerelease\":false,\"make_latest\":\"true\"}")
   echo "修改Release结果:${create_release_api_response}" >> push_github_tag.log
 }
 
-#---------------------------------------创建或修改Release:latest----------------------------------
+#---------------------------------------创建或修改当前版本的Release----------------------------------
+#每个版本一个Release(名称就是版本号),里面是这个版本所有平台的文件;以前版本的Release不动,可以继续下载
+#最新发布的版本标记为Latest,https://github.com/DAIRO-HY/DairoMUSIC/releases/latest 指向它
 release_id=$(get_release_id)
 echo release_id:$release_id
 if [ -n "$release_id" ]; then
-  echo "正在修改Release:latest..."
+  echo "正在修改Release:$tag_name..."
   update_release $release_id
 else
-  echo "正在创建Release:latest..."
+  echo "正在创建Release:$tag_name..."
   release_id=$(create_release)
 fi
 
@@ -139,33 +137,7 @@ check_and_upload_file(){
   upload_file $file_name
 }
 
-# 删除Release里原来的所有文件
-# Release:latest每次发布都是同一个,文件名里带版本号,不删除的话以前版本的文件会一直留在里面
-delete_all_assets(){
-  if [ -z "$release_id" ]; then
-    return
-  fi
-
-  #一次最多返回100个,多于100个时分几次删除
-  for i in 1 2 3 4 5; do
-    assets_json=$(curl -L \
-      -H "Accept: application/vnd.github+json" \
-      -H "Authorization: Bearer $github_token" \
-      -H "X-GitHub-Api-Version: 2026-03-10" \
-      "https://api.github.com/repos/${repo}/releases/${release_id}/assets?per_page=100")
-    asset_ids=$(echo "$assets_json" | jq -r 'if type=="array" then .[].id else empty end')
-    if [ -z "$asset_ids" ]; then
-      return
-    fi
-    for asset_id in $asset_ids; do
-      delete_asset $asset_id
-    done
-  done
-}
-
 #---------------------------------------上传编译好的二进制文件----------------------------------
-echo "正在删除Release:latest里原来的文件..."
-delete_all_assets
 check_and_upload_file "DairoMUSIC-linux-amd64-$version"
 check_and_upload_file "DairoMUSIC-linux-arm64-$version"
 check_and_upload_file "DairoMUSIC-mac-darwin-aarch64-$version"
