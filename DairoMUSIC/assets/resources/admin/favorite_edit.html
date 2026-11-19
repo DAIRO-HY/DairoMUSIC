@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    {{template include/head}}
+    <script src="/static/js/picker.js"></script>
+    <meta name="menu" content="/admin/favorite_list.html">
+    <title>编辑歌单</title>
+</head>
+<body>
+{{template include/layout}}
+<main class="app-main">
+    <div class="app-card">
+        <form id="form" class="app-form" action="/admin/api/favorite/save" onsubmit="onSubmitClick();return false;">
+            <input type="hidden" name="id">
+            <div class="text-secondary small mb-3">管理员建的歌单归管理员,可以放到首页的推荐分组、轮播里,也可以在「歌单列表」里分配给会员维护</div>
+            <div class="mb-3">
+                <label class="form-label">封面</label>
+                <div id="logo" class="mb-2"></div>
+                <input id="logoFile" type="file" accept="image/jpeg,image/png,image/webp" class="d-none" onchange="onLogoChange(this)">
+                <button type="button" id="logoBtn" class="btn btn-outline-primary btn-sm" onclick="$('#logoFile').click()"><i class="bi bi-image me-1"></i>上传封面</button>
+                <div id="logoTip" class="form-text"></div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">歌单名</label>
+                <input name="name" class="form-control" autocomplete="off" maxlength="32" style="max-width: 360px">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">简介 <span class="text-secondary small">(可以不填,最多1000个字)</span></label>
+                <textarea name="description" class="form-control" rows="3" maxlength="1000" style="max-width: 640px"></textarea>
+            </div>
+            <div class="mb-4">
+                <label class="form-label">歌曲 <span class="text-secondary small">(按下面的顺序显示,共<span id="musicCount">0</span>首)</span></label>
+                <div id="musics" class="mb-2" style="max-width: 640px"></div>
+                <div id="picker" style="max-width: 640px"></div>
+                <input type="hidden" name="musicIds">
+            </div>
+            <button type="submit" class="btn btn-primary px-4">保存</button>
+            <a class="btn btn-light ms-2" href="/admin/favorite_list.html">返回</a>
+        </form>
+    </div>
+</main>
+<script>
+    const id = getParam("id", "0")
+
+    /** 歌单里的歌曲,按显示顺序排列 */
+    let musics = []
+
+    $(function () {
+        new SearchPicker({
+            el: "#picker", url: "/admin/api/common/music_search", placeholder: "输入歌名、歌手或歌曲ID搜索,点击添加", onPick: item => {
+                if (!musics.some(it => it.id === item.id)) {
+                    musics.push(item)
+                    renderMusics()
+                }
+            }
+        })
+        $("#musics").on("click", "[data-move]", e => {
+            const $btn = $(e.currentTarget)
+            const index = parseInt($btn.data("index"))
+            const move = parseInt($btn.data("move"))
+            const item = musics.splice(index, 1)[0]
+
+            //move为0时移除,否则上移或下移
+            if (move !== 0) {
+                musics.splice(index + move, 0, item)
+            }
+            renderMusics()
+        })
+        if (id === "0") {
+            document.title = "新建歌单"
+            $("#logo").html(logoHtml(null, 180))
+            $("#logoBtn").addClass("d-none")
+            $("#logoTip").text("保存之后可以上传封面。没有上传封面时使用第一首歌的封面")
+            $("input[name='id']").val("0")
+            renderMusics()
+            return
+        }
+        $.ajaxByData("/admin/api/favorite/detail").add("id", id).success(data => {
+            $("#form").bindValue(data)
+            $("#logo").html(logoHtml(data.logoUrl, 180))
+            $("#logoTip").text(data.customLogo ? "已上传封面" : "没有上传封面,使用第一首歌的封面")
+            musics = data.musics
+            renderMusics()
+        }).get()
+    })
+
+    function renderMusics() {
+        $("input[name='musicIds']").val(musics.map(it => it.id).join(","))
+        $("#musicCount").text(musics.length)
+        if (musics.length === 0) {
+            $("#musics").html(`<div class="text-secondary small">还没有添加歌曲</div>`)
+            return
+        }
+        const last = musics.length - 1
+        $("#musics").html(musics.map((it, i) => `<div class="picked-item">
+            ${pickItemHtml(it)}
+            <span class="ms-auto text-nowrap">
+                <button type="button" class="btn btn-sm btn-link px-1" data-move="-1" data-index="${i}" title="上移" ${i === 0 ? "disabled" : ""}><i class="bi bi-arrow-up"></i></button>
+                <button type="button" class="btn btn-sm btn-link px-1" data-move="1" data-index="${i}" title="下移" ${i === last ? "disabled" : ""}><i class="bi bi-arrow-down"></i></button>
+                <button type="button" class="btn btn-sm btn-link px-1 text-danger" data-move="0" data-index="${i}" title="移除"><i class="bi bi-x-lg"></i></button>
+            </span>
+        </div>`).join(""))
+    }
+
+    function onSubmitClick() {
+        $("#form").ajaxByForm().success(newId => {
+            //新建之后留在编辑页,可以接着上传封面
+            if (id === "0") {
+                location.replace("/admin/favorite_edit.html?id=" + newId)
+                return
+            }
+            location.href = "/admin/favorite_list.html"
+        }).post()
+    }
+
+    /**
+     * 上传封面
+     */
+    function onLogoChange(input) {
+        const file = input.files[0]
+        input.value = ""
+        if (!file) {
+            return
+        }
+        const form = new FormData()
+        form.append("id", id)
+        form.append("file", file)
+        $.ajax({url: "/admin/api/favorite/upload_logo", method: "POST", data: form, processData: false, contentType: false})
+            .done(url => {
+                $("#logo").html(logoHtml(url, 180))
+                $("#logoTip").text("已上传封面")
+            })
+            .fail(xhr => alert(xhr.responseText || "上传失败"))
+    }
+</script>
+</body>
+</html>

@@ -73,3 +73,18 @@ select coalesce(max(sort), 0) from user_music where favoriteId = :favorite_id;
 -- @name delete_by_music
 -- @param music_id:i64
 delete from user_music where musicId = :music_id;
+
+-- ------------------------------
+
+-- 删除歌单里的所有歌曲(后台保存歌单时按新的顺序重新添加)
+-- @name delete_by_favorite
+-- @param favorite_id:i64
+delete from user_music where favoriteId = :favorite_id;
+
+-- ------------------------------
+
+-- 修改歌单里的歌曲所属的会员(歌单换了所属的会员时)
+-- @name update_user_by_favorite
+-- @param favorite_id:i64
+-- @param user_id:i64
+update user_music set userId = :user_id where favoriteId = :favorite_id;

@@ -357,6 +357,27 @@ pub struct UsefulEdit {
     pub sort: i64,
 }
 
+/// 后台新建、修改归管理员的歌单
+#[derive(Deserialize, Debug, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct FavoriteSave {
+    // ID,新建时为0
+    #[serde(default)]
+    pub id: i64,
+
+    #[validate(length(min = 1, max = 32, message = "歌单名长度必须在1到32位之间"))]
+    pub name: String,
+
+    // 简介
+    #[serde(default)]
+    #[validate(length(max = 1000, message = "简介长度不能超过1000位"))]
+    pub description: String,
+
+    // 歌单里的歌曲ID,逗号分隔,按显示顺序排列
+    #[serde(default)]
+    pub music_ids: String,
+}
+
 /// 修改歌单所属的会员
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

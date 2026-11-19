@@ -20,7 +20,7 @@ use sqlx_context::DbContext;
 use validator::Validate;
 
 /// 歌单最多的歌曲数
-const MAX_MUSIC_COUNT: i64 = 10000;
+pub const MAX_MUSIC_COUNT: i64 = 10000;
 
 /// 歌单
 #[derive(Serialize)]
@@ -178,6 +178,7 @@ pub async fn delete(login: Ext<LoginUser>, id: i64) -> Result<(), BizError> {
     if user_favorite_dao::count_referenced(&mut ctx, id.to_string()).await? > 0 {
         //首页的推荐分组、轮播正在使用的歌单不能真正删除,改为归管理员(所属会员ID为0),管理员可以再分配给其他会员维护
         user_favorite_dao::set_owner(&mut ctx, id, 0).await?;
+        user_music_dao::update_user_by_favorite(&mut ctx, id, 0).await?;
         ctx.commit().await?;
     } else {
         user_favorite_dao::set_deleted(&mut ctx, id, time_util::current_millis()).await?;

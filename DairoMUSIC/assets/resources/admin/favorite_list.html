@@ -20,8 +20,9 @@
                 <input class="form-check-input" type="checkbox" role="switch" id="adminOnly">
                 <label class="form-check-label" for="adminOnly">只看归管理员的</label>
             </div>
+            <a class="btn btn-primary ms-auto" href="/admin/favorite_edit.html"><i class="bi bi-plus-lg me-1"></i>新建歌单</a>
         </form>
-        <div class="text-secondary small mb-2">会员在APP里创建的歌单。首页使用的歌单被会员删除时不会真正删除,而是归管理员,可以再分配给其他会员维护</div>
+        <div class="text-secondary small mb-2">会员在APP里创建的歌单。首页使用的歌单被会员删除时不会真正删除,而是归管理员,可以再分配给其他会员维护。管理员也可以自己新建歌单,归管理员的歌单可以编辑</div>
         <form id="assignForm" class="alert alert-light border d-none" onsubmit="onAssignSubmit();return false;">
             <div class="mb-2">把歌单【<span id="assignName" class="fw-medium"></span>】分配给:</div>
             <div class="d-flex flex-wrap align-items-start gap-2">
@@ -45,7 +46,7 @@
         columns: [
             {title: "", render: it => logoHtml(it.logoUrl)},
             {title: "ID", data: "id", sortKey: "id"},
-            {title: "歌单名", render: it => ellipsis(it.name, 320), sortKey: "name"},
+            {title: "歌单名", render: it => it.userId === 0 ? `<a href="/admin/favorite_edit.html?id=${it.id}" class="text-decoration-none">${ellipsis(it.name, 320)}</a>` : ellipsis(it.name, 320), sortKey: "name"},
             {title: "歌曲数", data: "musicCount", sortKey: "musicCount"},
             {
                 title: "所属会员", sortKey: "userId", render: it => it.userId === 0
@@ -56,6 +57,7 @@
             {title: "创建时间", render: it => formatTime(it.date), sortKey: "date", className: "text-nowrap"}
         ],
         actions: [
+            {icon: "bi-pencil-square", title: "编辑", show: it => it.userId === 0, onClick: it => location.href = "/admin/favorite_edit.html?id=" + it.id},
             {icon: "bi-person-gear", title: "分配给会员", onClick: it => openAssign(it)},
             {
                 icon: "bi-trash3", title: "删除", danger: true, show: it => it.userId === 0 && it.homeCount === 0,

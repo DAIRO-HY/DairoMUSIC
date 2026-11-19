@@ -15,7 +15,7 @@ struct Assets;
 /// 注意:升级时新增的字段(ALTER TABLE ADD COLUMN)是加在表的最后,建表语句里也必须加在最后,保持顺序一致。
 /// dsl里固定的"select *"语句是按字段的位置读取的,顺序不一致时升级上来的数据库会读错字段。
 /// (music表的auditState是例外:升级上来的数据库在最后,建表语句里在中间,所以music表不能写固定的"select *"语句)
-const VERSION: i32 = 11;
+const VERSION: i32 = 12;
 
 /// 数据库文件名
 pub const DB_FILE_NAME: &str = "dairo-music.sqlite";
@@ -161,6 +161,14 @@ WHERE url = '/admin/favorite_list.html'
   AND EXISTS (SELECT 1 FROM admin_menu_bar WHERE url = '/admin/music_list.html' AND parentId != 0);
 ";
 
+/// 版本11升级到版本12:歌单里的歌曲所属的会员改成和歌单一致
+/// 以前歌单分配给其他会员、或者会员删除首页正在使用的歌单(归管理员)时,只改了歌单所属的会员
+const UPGRADE_V12: &str = "
+UPDATE user_music
+SET userId = (SELECT f.userId FROM user_favorite f WHERE f.id = user_music.favoriteId)
+WHERE userId != (SELECT f.userId FROM user_favorite f WHERE f.id = user_music.favoriteId);
+";
+
 /// 全新安装时的初始数据(菜单、超级管理员角色)
 const INIT_DATA_FILE: &str = "init_data.sql";
 
@@ -304,6 +312,11 @@ async fn upgrade(with_init_data: bool) -> Result<(), Box<dyn Error>> {
         if version < 11 {
             let mut tx = (&mut *conn).begin().await?;
             sqlx::raw_sql(UPGRADE_V11).execute(&mut *tx).await?;
+            tx.commit().await?;
+        }
+        if version < 12 {
+            let mut tx = (&mut *conn).begin().await?;
+            sqlx::raw_sql(UPGRADE_V12).execute(&mut *tx).await?;
             tx.commit().await?;
         }
     }
