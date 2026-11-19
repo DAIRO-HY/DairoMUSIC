@@ -1,7 +1,8 @@
 //! 系统配置
 
 use crate::service::config_service::{self, Config};
-use crate::service::email_service;
+use crate::service::software_service::SEARCH;
+use crate::service::{email_service, process_service};
 use crate::web::biz_error::BizError;
 use crate::web::form;
 use crate::biz_error;
@@ -28,10 +29,16 @@ pub async fn save(form: form::SystemConfig) -> Result<(), BizError> {
     if !["", "software", "videotoolbox", "nvenc", "qsv"].contains(&form.video_encoder.as_str()) {
         return Err(BizError::field("videoEncoder", "视频编码器不正确"));
     }
+    let collect_enable = form.collect_enable == 1;
+    let old = config_service::get();
+    if collect_enable && !old.collect_builtin && old.collect_url.trim().is_empty() {
+        return Err(BizError::field("collectEnable", "使用外部采集服务时,请先在「采集服务配置」里填写采集服务的地址"));
+    }
 
     //采集服务、DFS、ffmpeg等在各自的页面设置,这里只修改本页面的配置
     config_service::update(|it| {
         it.allow_register = form.allow_register == 1;
+        it.collect_enable = collect_enable;
         it.smtp_host = form.smtp_host.trim().to_string();
         it.smtp_port = form.smtp_port;
         it.smtp_user = form.smtp_user.trim().to_string();
@@ -50,6 +57,11 @@ pub async fn save(form: form::SystemConfig) -> Result<(), BizError> {
         it.vip_max_years = form.vip_max_years;
     })
     .await?;
+
+    //启用、停用了歌曲采集时,启动、停止内置采集服务
+    if old.collect_enable != collect_enable {
+        process_service::apply_config(&SEARCH).await;
+    }
 
     //可能启用了采集,有等待处理的任务时开始处理
     crate::service::collect_task::wake();

@@ -10,12 +10,7 @@
 <main class="app-main">
     <form id="form" action="/admin/api/search_config/save" onsubmit="onSubmitClick();return false;">
         <div class="app-card">
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" name="enable" value="1" id="enable">
-                <label class="form-check-label" for="enable">启用歌曲采集 <span class="text-secondary small">(DairoMUSIC-Search 从YouTube搜索和采集歌曲、视频)</span></label>
-            </div>
-            <div class="text-secondary small mt-1">不启用时,客户端不能从采集平台搜索歌曲,已经添加的采集任务暂停处理</div>
-            <hr class="my-3">
+            <div id="enableTip" class="alert py-2 small mb-3"></div>
             <div class="form-check">
                 <input class="form-check-input" type="radio" name="builtin" value="1" id="builtin1" onchange="onModeChange()">
                 <label class="form-check-label" for="builtin1">内置采集服务 <span class="text-secondary small">(推荐。由DairoMUSIC安装和运行)</span></label>
@@ -108,7 +103,10 @@
         $.ajaxByData("/admin/api/search_config/detail").success(data => {
             detail = data
             $("#form").bindValue(data)
-            $("#enable").prop("checked", data.enable)
+            $("#enableTip").toggleClass("alert-success", data.enable).toggleClass("alert-warning", !data.enable)
+                .html(data.enable
+                    ? `已启用歌曲采集(DairoMUSIC-Search 从YouTube搜索和采集歌曲、视频)。在 <a href="/admin/system_config.html">系统配置</a> 里可以关闭`
+                    : `还没有启用歌曲采集,这里的设置暂时不生效。请在 <a href="/admin/system_config.html">系统配置</a> 里开启`)
             $(`input[name=builtin][value=${data.builtin ? 1 : 0}]`).prop("checked", true)
             $("#port").attr("placeholder", data.defaultPort)
             $("#dataDir").attr("placeholder", data.defaultDataDir)

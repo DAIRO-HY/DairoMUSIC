@@ -15,7 +15,7 @@ struct Assets;
 /// 注意:升级时新增的字段(ALTER TABLE ADD COLUMN)是加在表的最后,建表语句里也必须加在最后,保持顺序一致。
 /// dsl里固定的"select *"语句是按字段的位置读取的,顺序不一致时升级上来的数据库会读错字段。
 /// (music表的auditState是例外:升级上来的数据库在最后,建表语句里在中间,所以music表不能写固定的"select *"语句)
-const VERSION: i32 = 10;
+const VERSION: i32 = 11;
 
 /// 数据库文件名
 pub const DB_FILE_NAME: &str = "dairo-music.sqlite";
@@ -143,6 +143,22 @@ SELECT 1, id FROM admin_menu_bar WHERE url IN ('/admin/music_correct_list.html',
 const UPGRADE_V10: &str = "
 ALTER TABLE user ADD COLUMN name VARCHAR(32);
 CREATE UNIQUE INDEX idx_user_name ON user (name);
+";
+
+/// 版本10升级到版本11:兑换码增加标签、备注;「歌单列表」菜单从「发现页管理」移到「歌曲管理」
+/// 菜单只在还在原来的位置时移动,在「导航菜单」里调整过的不动
+const UPGRADE_V11: &str = "
+ALTER TABLE vip_code ADD COLUMN tag VARCHAR(10);
+ALTER TABLE vip_code ADD COLUMN memo TEXT;
+CREATE INDEX idx_vip_code_tag ON vip_code (tag);
+UPDATE admin_menu_bar
+SET parentId = (SELECT parentId FROM admin_menu_bar WHERE url = '/admin/music_list.html'),
+    orderNum = (SELECT IFNULL(MAX(m.orderNum), 0) + 10 FROM admin_menu_bar m
+                WHERE m.parentId = (SELECT parentId FROM admin_menu_bar WHERE url = '/admin/music_list.html'))
+WHERE url = '/admin/favorite_list.html'
+  AND parentId = (SELECT parentId FROM admin_menu_bar WHERE url = '/admin/swiper_list.html')
+  AND (SELECT name FROM admin_menu_bar WHERE id = (SELECT parentId FROM admin_menu_bar WHERE url = '/admin/swiper_list.html')) = '发现页管理'
+  AND EXISTS (SELECT 1 FROM admin_menu_bar WHERE url = '/admin/music_list.html' AND parentId != 0);
 ";
 
 /// 全新安装时的初始数据(菜单、超级管理员角色)
@@ -283,6 +299,11 @@ async fn upgrade(with_init_data: bool) -> Result<(), Box<dyn Error>> {
         if version < 10 {
             let mut tx = (&mut *conn).begin().await?;
             sqlx::raw_sql(UPGRADE_V10).execute(&mut *tx).await?;
+            tx.commit().await?;
+        }
+        if version < 11 {
+            let mut tx = (&mut *conn).begin().await?;
+            sqlx::raw_sql(UPGRADE_V11).execute(&mut *tx).await?;
             tx.commit().await?;
         }
     }

@@ -10,8 +10,11 @@ CREATE TABLE vip_code
     state      INTEGER     NOT NULL default 0, -- 状态 0:未使用 1:已使用 2:已作废
     userId     INT8, -- 兑换的会员ID
     useTime    INT8, -- 兑换时间(毫秒)
-    date       INT8        NOT NULL -- 生成时间(毫秒)
+    date       INT8        NOT NULL, -- 生成时间(毫秒)
+    tag        VARCHAR(10), -- 标签(生成时填写,同一批相同,可以修改)
+    memo       TEXT -- 备注(最多3000字)
 );
 CREATE INDEX idx_vip_code_batch ON vip_code (batchNo);
 CREATE INDEX idx_vip_code_state ON vip_code (state);
 CREATE INDEX idx_vip_code_user ON vip_code (userId);
+CREATE INDEX idx_vip_code_tag ON vip_code (tag);

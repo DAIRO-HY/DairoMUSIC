@@ -17,6 +17,14 @@ $(function () {
 function initLayout() {
     $("#appTitle").text(document.title)
 
+    //从左侧菜单打开的列表页从头开始,不恢复上次的筛选条件、页码
+    $("#appMenu").on("click", "a.app-menu-item", e => {
+        try {
+            sessionStorage.setItem(TABLE_FRESH_KEY, new URL(e.currentTarget.href, location.href).pathname)
+        } catch {
+        }
+    })
+
     //先用缓存的菜单显示,之后再从服务器获取最新的
     try {
         const cache = sessionStorage.getItem(MENU_CACHE_KEY)
@@ -161,6 +169,23 @@ function formatSize(size) {
     return (i === 0 ? value : value.toFixed(2)) + units[i]
 }
 
+/** 列表页的状态(筛选条件、页码、排序、滚动位置)保存在sessionStorage里的key前缀,关闭浏览器标签页后清空 */
+const TABLE_STATE_PREFIX = "pageTable:"
+
+/** 点击左侧菜单时记下打开的页面,这个页面的列表从头开始,不恢复上次的状态 */
+const TABLE_FRESH_KEY = "pageTableFresh"
+
+/** 当前页面是不是从左侧菜单打开的 */
+const PAGE_OPENED_FROM_MENU = (() => {
+    try {
+        const url = sessionStorage.getItem(TABLE_FRESH_KEY)
+        sessionStorage.removeItem(TABLE_FRESH_KEY)
+        return url === location.pathname
+    } catch {
+        return false
+    }
+})()
+
 /**
  * 数据表格(服务端分页)
  * 用法:
@@ -177,6 +202,8 @@ function formatSize(size) {
  *       empty: "暂无数据"
  *   })
  *   table.load()
+ *
+ * 筛选条件、页码、排序、滚动位置会自动保存,从详细页返回(或者跳转回来)时恢复;从左侧菜单打开时从头开始
  */
 class PageTable {
     constructor(options) {
@@ -186,6 +213,15 @@ class PageTable {
         this.sortKey = ""
         this.sortType = ""
         this.list = []
+        this.stateKey = TABLE_STATE_PREFIX + location.pathname + "#" + options.el
+        this.savedState = this.readState()
+        if (this.savedState) {
+            //滚动位置由这里恢复,不使用浏览器自动恢复的位置(数据加载完之前页面高度不够)
+            history.scrollRestoration = "manual"
+        }
+        this.restored = false
+        this.restoring = false
+        this.saveScrollLater()
         if (options.search) {
             $(options.search).on("submit", e => {
                 e.preventDefault()
@@ -195,6 +231,11 @@ class PageTable {
                 let timer = null
                 const search = () => {
                     clearTimeout(timer)
+
+                    //恢复上次的条件时触发的change事件,不查询
+                    if (this.restoring) {
+                        return
+                    }
 
                     //条件和上次查询的一样时不查询(比如输入后又删掉)
                     if (JSON.stringify(this.searchParam()) !== this.lastSearch) {
@@ -256,14 +297,117 @@ class PageTable {
     }
 
     /**
+     * 读取上次保存的状态,从左侧菜单打开时删除
+     */
+    readState() {
+        try {
+            if (PAGE_OPENED_FROM_MENU) {
+                sessionStorage.removeItem(this.stateKey)
+                return null
+            }
+            const json = sessionStorage.getItem(this.stateKey)
+            return json ? JSON.parse(json) : null
+        } catch {
+            return null
+        }
+    }
+
+    /**
+     * 保存状态
+     * @param change 要修改的部分
+     */
+    writeState(change) {
+        try {
+            const json = sessionStorage.getItem(this.stateKey)
+            const state = Object.assign(json ? JSON.parse(json) : {}, change)
+            sessionStorage.setItem(this.stateKey, JSON.stringify(state))
+        } catch {
+        }
+    }
+
+    /**
+     * 滚动时保存滚动位置(停止滚动0.2秒后),离开页面时再保存一次
+     */
+    saveScrollLater() {
+        let timer = null
+        $(window).on("scroll", () => {
+            clearTimeout(timer)
+            timer = setTimeout(() => this.writeState({scrollY: window.scrollY}), 200)
+        })
+        $(window).on("pagehide", () => this.writeState({scrollY: window.scrollY}))
+    }
+
+    /**
+     * 把上次的筛选条件填回搜索表单
+     * @return 搜索表单里没能填回去的条件(下拉框的选项还没有加载),第一次查询时直接使用
+     */
+    restoreForm(form) {
+        const pending = {}
+        if (!this.options.search || !form) {
+            return pending
+        }
+        this.restoring = true
+        $(this.options.search).find(":input[name]").each((_, el) => {
+            if (el.type === "submit" || el.type === "button" || el.type === "file") {
+                return
+            }
+            const value = form[el.name]
+            const values = Array.isArray(value) ? value : (value == null ? [] : [value])
+            if (el.type === "checkbox" || el.type === "radio") {
+                const checked = values.includes(el.value)
+                if (el.checked !== checked) {
+                    el.checked = checked
+
+                    //页面上和勾选框联动的逻辑(比如勾选后修改输入框)
+                    $(el).trigger("change")
+                }
+                return
+            }
+            if (value == null) {
+                return
+            }
+            const text = values[0]
+            if (el.tagName === "SELECT" && text !== "" && $(el).find("option").filter((_, it) => it.value === text).length === 0) {
+                //选项还没有加载(从接口获取的选项),加载之后由fillOptions设置
+                $(el).attr("data-restore-value", text)
+                pending[el.name] = text
+                return
+            }
+            $(el).val(text)
+        })
+        this.restoring = false
+        return pending
+    }
+
+    /**
      * 加载数据
      * @param page 页码,不传时重新加载当前页
      */
     load(page) {
+        //第一次加载时恢复上次的状态
+        let pending = {}
+        let scrollY = null
+        if (!this.restored) {
+            this.restored = true
+            const state = this.savedState
+            if (state && !page) {
+                this.page = state.page || 1
+                this.sortKey = state.sortKey || ""
+                this.sortType = state.sortType || ""
+                pending = this.restoreForm(state.form)
+                scrollY = state.scrollY || 0
+            }
+        }
         if (page) {
             this.page = page
         }
-        const param = this.searchParam()
+        const param = Object.assign(pending, this.searchParam())
+        this.writeState({
+            form: this.options.search ? $(this.options.search).formData() : {},
+            page: this.page,
+            sortKey: this.sortKey,
+            sortType: this.sortType
+        })
 
         //记录查询条件,自动查询时用来判断条件有没有变化
         this.lastSearch = JSON.stringify(param)
@@ -276,9 +420,18 @@ class PageTable {
         }
         http.success(data => {
             if (this.options.paging) {
+                //恢复的页码超过了总页数(数据变少了)时,显示最后一页
+                const pageCount = Math.max(1, Math.ceil(data.total / this.options.pageSize))
+                if (this.page > pageCount) {
+                    this.load(pageCount)
+                    return
+                }
                 this.render(data.list, data.total)
             } else {
                 this.render(data, data.length)
+            }
+            if (scrollY != null) {
+                window.scrollTo(0, scrollY)
             }
         }).get()
     }
@@ -408,6 +561,14 @@ function fillOptions($select, options, first) {
         html += `<option value="${escapeHtml(it.value)}">${escapeHtml(it.text)}</option>`
     })
     $($select).html(html)
+
+    //列表页恢复上次的筛选条件时,选项还没有加载的下拉框
+    $($select).each((_, el) => {
+        const value = $(el).attr("data-restore-value")
+        if (value != null) {
+            $(el).removeAttr("data-restore-value").val(value)
+        }
+    })
 }
 
 /**

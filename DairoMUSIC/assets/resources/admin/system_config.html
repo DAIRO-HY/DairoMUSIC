@@ -67,10 +67,18 @@
             </div>
         </div>
         <div class="app-card">
+            <div class="app-card-title">歌曲采集</div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" name="collectEnable" value="1" id="collectEnable">
+                <label class="form-check-label" for="collectEnable">启用歌曲采集 <span class="text-secondary small">(DairoMUSIC-Search 从YouTube搜索和采集歌曲、视频)</span></label>
+            </div>
+            <div class="text-secondary small mt-1">不启用时,客户端不能从采集平台搜索歌曲,已经添加的采集任务暂停处理。采集服务的安装和连接在 <a href="/admin/search_config.html">采集服务配置</a> 里设置</div>
+        </div>
+        <div class="app-card">
             <div class="app-card-title">视频</div>
             <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" role="switch" name="videoEnable" value="1" id="videoEnable">
-                <label class="form-check-label" for="videoEnable">采集视频 <span class="text-secondary small">(需要在 <a href="/admin/search_config.html">采集服务配置</a> 里启用歌曲采集)</span></label>
+                <label class="form-check-label" for="videoEnable">采集视频 <span class="text-secondary small">(需要启用上面的歌曲采集)</span></label>
             </div>
             <div class="text-secondary small mt-1">采集最高规格的原画,iPhone不能直接播放的编码(VP9、AV1)转码成HEVC;原画高于480p或高于25fps时再转码一个480p 25fps的流畅版。视频文件较大,转码很耗CPU,同一时间只处理一个</div>
             <div class="app-form mt-3">
@@ -110,6 +118,7 @@
         $.ajaxByData("/admin/api/system_config/detail").success(data => {
             $("#form").bindValue(data)
             $("#allowRegister").prop("checked", data.allowRegister)
+            $("#collectEnable").prop("checked", data.collectEnable)
             $("#videoEnable").prop("checked", data.videoEnable)
             $("#allowSaveAlbum").prop("checked", data.allowSaveAlbum)
             $("#allowSendFile").prop("checked", data.allowSendFile)

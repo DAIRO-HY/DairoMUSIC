@@ -14,6 +14,7 @@ use validator::Validate;
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchConfigVo {
+    // 是否启用了歌曲采集(在系统配置里设置)
     pub enable: bool,
     pub builtin: bool,
     pub url: String,
@@ -50,13 +51,13 @@ pub async fn detail() -> SearchConfigVo {
     }
 }
 
-/// 保存配置,内置采集服务的配置有变化时重启
+/// 保存配置,内置采集服务的配置有变化时重启(是否启用歌曲采集在系统配置里设置)
 #[POST("/admin/api/search_config/save")]
 pub async fn save(form: form::SearchConfig) -> Result<(), BizError> {
     if let Err(e) = form.validate() {
         return Err(BizError::fields(e));
     }
-    let enable = form.enable == 1;
+    let enable = config_service::get().collect_enable;
     let builtin = form.builtin == 1;
     let url = check_url("url", &form.url)?;
     let public_url = check_url("publicUrl", &form.public_url)?;
@@ -78,7 +79,6 @@ pub async fn save(form: form::SearchConfig) -> Result<(), BizError> {
     }
     let old = config_service::get();
     let config = config_service::update(|it| {
-        it.collect_enable = enable;
         it.collect_builtin = builtin;
         it.collect_url = url;
         it.collect_public_mode = public_mode;
@@ -88,8 +88,7 @@ pub async fn save(form: form::SearchConfig) -> Result<(), BizError> {
         it.collect_thread_count = thread_count;
     })
     .await?;
-    let changed = old.collect_enable != config.collect_enable
-        || old.collect_builtin != config.collect_builtin
+    let changed = old.collect_builtin != config.collect_builtin
         || old.collect_port != config.collect_port
         || old.collect_data_dir != config.collect_data_dir
         || old.collect_thread_count != config.collect_thread_count
@@ -98,7 +97,7 @@ pub async fn save(form: form::SearchConfig) -> Result<(), BizError> {
         process_service::apply_config(&SEARCH).await;
     }
 
-    //可能启用了采集,有等待处理的任务时开始处理
+    //换了采集服务,有等待处理的任务时开始处理
     collect_task::wake();
     video_task::wake();
     Ok(())

@@ -40,12 +40,27 @@ pub struct VipCodeItem {
     // 兑换的会员
     pub user_id: Option<i64>,
     pub user_email: Option<String>,
+    pub user_name: Option<String>,
 
     // 兑换时间
     pub use_time: Option<i64>,
 
     // 生成时间
     pub date: i64,
+
+    // 标签
+    pub tag: Option<String>,
+}
+
+/// 兑换码明细
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VipCodeDetailVo {
+    #[serde(flatten)]
+    pub item: VipCodeItem,
+
+    // 备注
+    pub memo: Option<String>,
 }
 
 /// 导出的兑换码
@@ -68,8 +83,9 @@ pub async fn list(
     card_no: Option<String>,
     state: Option<i64>,
     user_id: Option<i64>,
+    tag: Option<String>,
 ) -> Result<PageData<VipCodeItem>, BizError> {
-    let page_in = page.to_page_in(&["id", "cardNo", "batchNo", "days", "expireTime", "state", "useTime"], "id", "desc");
+    let page_in = page.to_page_in(&["id", "cardNo", "batchNo", "days", "expireTime", "state", "useTime", "tag"], "id", "desc");
     let now = time_util::current_millis();
     let (state, expire_before, expire_after) = match state {
         Some(0) => (Some(0), None, Some(now)),
@@ -87,6 +103,7 @@ pub async fn list(
         user_id,
         expire_before,
         expire_after,
+        tag: non_empty(tag),
     };
     let (total, list) = vip_code_dao::page_list(&mut ctx, page_in, param).await?;
     let list = list
@@ -102,11 +119,77 @@ pub async fn list(
             state: it.state,
             user_id: it.userId,
             user_email: it.userEmail,
+            user_name: it.userName,
             use_time: it.useTime,
             date: it.date,
+            tag: it.tag,
         })
         .collect();
     Ok(PageData::new(total, list))
+}
+
+/// 兑换码明细
+#[GET("/admin/api/vip_code/detail")]
+pub async fn detail(id: i64) -> Result<VipCodeDetailVo, BizError> {
+    let mut ctx = lib_db::get_context();
+    let Some(it) = vip_code_dao::select_detail(&mut ctx, id).await? else {
+        return Err(biz_error!("兑换码不存在"));
+    };
+    let now = time_util::current_millis();
+    Ok(VipCodeDetailVo {
+        memo: it.memo,
+        item: VipCodeItem {
+            expired: it.state == 0 && it.expireTime < now,
+            id: it.id,
+            card_no: it.cardNo,
+            card_pwd: it.cardPwd,
+            batch_no: it.batchNo,
+            days: it.days,
+            expire_time: it.expireTime,
+            state: it.state,
+            user_id: it.userId,
+            user_email: it.userEmail,
+            user_name: it.userName,
+            use_time: it.useTime,
+            date: it.date,
+            tag: it.tag,
+        },
+    })
+}
+
+/// 修改兑换码:标签、备注任何状态都可以修改;VIP时长、有效期只有未使用的可以修改(已使用、已作废的不修改)
+#[POST("/admin/api/vip_code/edit")]
+pub async fn edit(form: form::VipCodeEdit) -> Result<(), BizError> {
+    if let Err(e) = form.validate() {
+        return Err(BizError::fields(e));
+    }
+    let mut ctx = lib_db::get_context();
+    let Some(code) = vip_code_dao::select_detail(&mut ctx, form.id).await? else {
+        return Err(biz_error!("兑换码不存在"));
+    };
+    let validity = if code.state == 0 { Some(check_validity(form.forever, form.days, &form.expire_date)?) } else { None };
+    let mut ctx = db::begin().await?;
+    if let Some((days, expire_time)) = validity {
+        vip_code_dao::update_validity(&mut ctx, form.id, days, expire_time).await?;
+    }
+    vip_code_dao::update_info(&mut ctx, form.id, non_empty(Some(form.tag)), non_empty(Some(form.memo))).await?;
+    ctx.commit().await?;
+    Ok(())
+}
+
+/// 检查VIP时长和有效期,返回VIP天数(0:永久)和有效期(毫秒)
+fn check_validity(forever: i64, days: i64, expire_date: &str) -> Result<(i64, i64), BizError> {
+    let days = if forever == 1 { 0 } else { days };
+    if forever != 1 && !(1..=36500).contains(&days) {
+        return Err(BizError::field("days", "VIP时长必须在1到36500天之间"));
+    }
+    let Some(expire_time) = time_util::date_end_millis(expire_date) else {
+        return Err(BizError::field("expireDate", "请选择兑换码的有效期"));
+    };
+    if expire_time < time_util::current_millis() {
+        return Err(BizError::field("expireDate", "有效期不能早于今天"));
+    }
+    Ok((days, expire_time))
 }
 
 /// 批量生成兑换码,返回批次号(生成时间,如20261114123400)
@@ -115,17 +198,10 @@ pub async fn generate(form: form::VipCodeGenerate) -> Result<String, BizError> {
     if let Err(e) = form.validate() {
         return Err(BizError::fields(e));
     }
-    let days = if form.forever == 1 { 0 } else { form.days };
-    if form.forever != 1 && !(1..=36500).contains(&days) {
-        return Err(BizError::field("days", "VIP时长必须在1到36500天之间"));
-    }
+    let (days, expire_time) = check_validity(form.forever, form.days, &form.expire_date)?;
     let now = time_util::current_millis();
-    let Some(expire_time) = time_util::date_end_millis(&form.expire_date) else {
-        return Err(BizError::field("expireDate", "请选择兑换码的有效期"));
-    };
-    if expire_time < now {
-        return Err(BizError::field("expireDate", "有效期不能早于今天"));
-    }
+    let tag = non_empty(Some(form.tag.clone()));
+    let memo = non_empty(Some(form.memo.clone()));
     let batch_no = chrono::Local::now().format("%Y%m%d%H%M%S").to_string();
     let mut ctx = db::begin().await?;
     if vip_code_dao::count_by_batch(&mut ctx, batch_no.clone()).await? > 0 {
@@ -147,6 +223,8 @@ pub async fn generate(form: form::VipCodeGenerate) -> Result<String, BizError> {
             days,
             expireTime: expire_time,
             date: now,
+            tag: tag.clone(),
+            memo: memo.clone(),
             ..Default::default()
         };
         vip_code_dao::insert(&mut ctx, &code).await?;

@@ -190,6 +190,45 @@ pub struct VipCodeGenerate {
     // 兑换码的有效期(如 2026-11-14,到这一天结束)
     #[serde(default)]
     pub expire_date: String,
+
+    // 标签(这一批都使用这个标签)
+    #[serde(default)]
+    #[validate(length(max = 10, message = "标签不能超过10个字"))]
+    pub tag: String,
+
+    // 备注
+    #[serde(default)]
+    #[validate(length(max = 3000, message = "备注不能超过3000个字"))]
+    pub memo: String,
+}
+
+/// 修改兑换码
+#[derive(Deserialize, Debug, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct VipCodeEdit {
+    pub id: i64,
+
+    // 标签
+    #[serde(default)]
+    #[validate(length(max = 10, message = "标签不能超过10个字"))]
+    pub tag: String,
+
+    // 备注
+    #[serde(default)]
+    #[validate(length(max = 3000, message = "备注不能超过3000个字"))]
+    pub memo: String,
+
+    // 是否永久VIP(只有未使用的兑换码修改)
+    #[serde(default)]
+    pub forever: i64,
+
+    // 兑换之后VIP的天数(只有未使用的兑换码修改)
+    #[serde(default)]
+    pub days: i64,
+
+    // 兑换码的有效期(只有未使用的兑换码修改)
+    #[serde(default)]
+    pub expire_date: String,
 }
 
 /// 兑换VIP
@@ -615,6 +654,10 @@ pub struct SystemConfig {
     #[validate(length(max = 64, message = "长度不能超过64位"))]
     pub smtp_from_name: String,
 
+    // 是否启用歌曲采集 1:启用 0:不启用
+    #[serde(default)]
+    pub collect_enable: i64,
+
     // 是否采集视频 1:采集 0:不采集
     #[serde(default)]
     pub video_enable: i64,
@@ -699,10 +742,6 @@ pub struct DfsConfig {
 #[derive(Debug, Deserialize, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchConfig {
-    // 是否启用歌曲采集 1:启用 0:不启用
-    #[serde(default)]
-    pub enable: i64,
-
     // 1:使用内置的采集服务 0:使用外部的采集服务
     #[serde(default)]
     pub builtin: i64,

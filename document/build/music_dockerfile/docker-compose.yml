@@ -1,21 +1,18 @@
 services:
   dairo-music:
-    image: dairopapa/dairo-music:2.0.0
+    image: dairopapa/dairo-music:latest
     restart: always
-    container_name: dairo-music
+    container_name: dairo-music-test
 
     #使用宿主机网络:内置DairoDFS、采集服务设置成「直接访问」时,它们的端口也能被客户端访问
     #客户端访问方式使用默认的「通过DairoMUSIC代理」时,也可以改成只映射DairoMUSIC的端口
     network_mode: host
-    #ports:
-    #  - 8020:8020
-
     environment:
       #时区
       TZ: Asia/Shanghai
 
       #WEB端口,默认8020
-      DAIRO_MUSIC_WEB_PORT: 8020
+      DAIRO_MUSIC_WEB_PORT: 9020
     volumes:
       #数据库、后台安装的DairoDFS、采集服务、依赖软件及它们的数据都在这个目录下
       - ./data:/app/data

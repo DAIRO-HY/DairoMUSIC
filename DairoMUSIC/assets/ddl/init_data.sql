@@ -23,7 +23,7 @@ INSERT INTO admin_menu_bar (id, name, ico, url, parentId, orderNum) VALUES
 (16, '发现页管理', 'compass-fill', NULL, 0, 50),
 (17, '轮播图', NULL, '/admin/swiper_list.html', 16, 10),
 (18, '推荐分组', NULL, '/admin/useful_list.html', 16, 20),
-(19, '歌单列表', NULL, '/admin/favorite_list.html', 16, 30),
+(19, '歌单列表', NULL, '/admin/favorite_list.html', 7, 50),
 (20, 'VIP兑换码', NULL, '/admin/vip_code_list.html', 5, 20),
 (21, '歌曲纠错', NULL, '/admin/music_correct_list.html', 7, 30),
 (22, '歌曲投诉', NULL, '/admin/music_complaint_list.html', 7, 40);

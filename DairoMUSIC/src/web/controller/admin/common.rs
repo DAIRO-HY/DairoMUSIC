@@ -94,6 +94,80 @@ pub async fn todo(login: Ext<LoginAdmin>) -> Result<Todo, BizError> {
     Ok(todo)
 }
 
+/// 运行环境的问题(首页醒目提示)
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthIssue {
+    // 有问题的软件或服务
+    pub name: &'static str,
+
+    // 问题说明
+    pub msg: String,
+
+    // 去设置的页面
+    pub url: &'static str,
+}
+
+/// 检查运行需要的软件和服务:DairoDFS、ffmpeg、ffprobe,启用了歌曲采集时检查采集服务,内置采集服务还要检查yt-dlp、deno
+/// 返回有问题的项,全部正常时返回空数组
+#[GET("/admin/api/common/health")]
+pub async fn health() -> Vec<HealthIssue> {
+    use crate::service::software_service::{self, Software, DENO, DFS, FFMPEG, FFPROBE, SEARCH, YT_DLP};
+    use crate::service::{collect_service, config_service, dfs_service};
+    use std::time::Duration;
+
+    const TIMEOUT: Duration = Duration::from_secs(5);
+    const SOFTWARE_URL: &str = "/admin/software.html";
+    let config = config_service::get();
+
+    //工具不能运行
+    let check_tool = |sw: &'static Software| async move {
+        match software_service::version(sw).await {
+            Ok(_) => None,
+            Err(e) => Some(HealthIssue { name: sw.name, msg: format!("不能使用: {}", e), url: SOFTWARE_URL }),
+        }
+    };
+
+    //DairoDFS
+    let check_dfs = async {
+        let url = "/admin/dfs_config.html";
+        if config.dfs_builtin && !software_service::is_installed(&DFS) {
+            return Some(HealthIssue { name: DFS.name, msg: "还没有安装内置的DairoDFS,歌曲、图片都不能保存".to_string(), url });
+        }
+        match tokio::time::timeout(TIMEOUT, dfs_service::test()).await {
+            Ok(Ok(_)) => None,
+            Ok(Err(e)) => Some(HealthIssue { name: DFS.name, msg: format!("连接失败,歌曲、图片都不能保存: {}", e), url }),
+            Err(_) => Some(HealthIssue { name: DFS.name, msg: "连接超时,歌曲、图片都不能保存".to_string(), url }),
+        }
+    };
+
+    //采集服务
+    let check_collect = async {
+        let url = "/admin/search_config.html";
+        if !config.collect_enable {
+            return None;
+        }
+        if config.collect_builtin && !software_service::is_installed(&SEARCH) {
+            return Some(HealthIssue { name: SEARCH.name, msg: "已经启用了歌曲采集,但是还没有安装内置的采集服务".to_string(), url });
+        }
+        match tokio::time::timeout(TIMEOUT, collect_service::test()).await {
+            Ok(Ok(_)) => None,
+            Ok(Err(e)) => Some(HealthIssue { name: SEARCH.name, msg: format!("已经启用了歌曲采集,但是{}", e), url }),
+            Err(_) => Some(HealthIssue { name: SEARCH.name, msg: "已经启用了歌曲采集,但是连接超时".to_string(), url }),
+        }
+    };
+    let collect_tools = async {
+        if config.collect_enable && config.collect_builtin {
+            let (yt_dlp, deno) = tokio::join!(check_tool(&YT_DLP), check_tool(&DENO));
+            vec![yt_dlp, deno]
+        } else {
+            Vec::new()
+        }
+    };
+    let (dfs, ffmpeg, ffprobe, collect, tools) = tokio::join!(check_dfs, check_tool(&FFMPEG), check_tool(&FFPROBE), check_collect, collect_tools);
+    [dfs, ffmpeg, ffprobe, collect].into_iter().chain(tools).flatten().collect()
+}
+
 /// 获取当前登录的管理员信息
 #[GET("/admin/api/common/info")]
 pub async fn info(login: Ext<LoginAdmin>) -> Result<Info, BizError> {
