@@ -36,7 +36,7 @@
     </div>
     <div id="message" class="py-5 text-secondary">加载中…</div>
     <hr class="border-secondary my-4">
-    <a class="btn btn-outline-light btn-sm" href="/download.html"><i class="bi bi-phone me-1"></i>下载 DairoMUSIC App</a>
+    <a id="app" class="btn btn-outline-light btn-sm" href="/download.html"><i class="bi bi-phone me-1"></i>下载 DairoMUSIC App</a>
 </div>
 <script>
     function text(str) {
@@ -64,6 +64,14 @@
             $("#content").removeClass("d-none")
         }).fail(() => {
             $("#message").text("歌曲不存在或已被删除")
+        })
+
+        //有Android最新版时直接下载,没有时打开下载页
+        $.getJSON("/api/public/download_info").done(data => {
+            if (data.androidUrl) {
+                $("#app").attr("href", data.androidUrl)
+                    .html(`<i class="bi bi-android2 me-1"></i>下载 DairoMUSIC Android 版 ${text(data.androidVersion || "")}`)
+            }
         })
     })
 </script>

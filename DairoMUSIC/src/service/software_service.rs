@@ -670,7 +670,7 @@ pub async fn recommend(sw: &'static Software) -> Result<Recommend, String> {
 /// 从GitHub获取最新发布版本里的安装包地址
 /// - repo 仓库,如 DAIRO-HY/DairoDFS
 /// - matches 判断是不是当前系统的安装包(按文件名)
-async fn github_latest(repo: &str, matches: impl Fn(&str) -> bool) -> Result<Recommend, String> {
+pub async fn github_latest(repo: &str, matches: impl Fn(&str) -> bool) -> Result<Recommend, String> {
     let url = format!("https://api.github.com/repos/{}/releases/latest", repo);
     let res = CLIENT
         .get(url)
